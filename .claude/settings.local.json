@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem \"C:\\\\repo\\\\study-todo-app\" -ErrorAction SilentlyContinue | Select-Object Name; if \\(-not \\(Test-Path \"C:\\\\repo\\\\study-todo-app\"\\)\\) { \"디렉토리 없음\" } else { \"디렉토리 있음 \\(비어있을 수 있음\\)\" })",
+      "PowerShell(npm *)"
+    ]
+  }
+}
