@@ -1,214 +1,214 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
 
 const app = express();
-app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'] }));
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-const DB_FILE = path.join(__dirname, 'data.json');
 const INTERVALS = [1, 3, 7, 16, 30];
 
-function loadDB() {
-  try {
-    if (fs.existsSync(DB_FILE)) return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-  } catch {}
-  return { todos: [], reviews: [], nextTodoId: 1, nextReviewId: 1 };
-}
+// ── MongoDB 스키마 ─────────────────────────────────
+const todoSchema = new mongoose.Schema({
+  text:         { type: String, required: true },
+  importance:   { type: Number, default: 1 },
+  deadline:     { type: String, default: null },
+  perform_date: { type: String, default: null },
+  needs_review: { type: Number, default: 0 },
+  progress:     { type: Number, default: null },
+  start_time:   { type: String, default: null },
+  end_time:     { type: String, default: null },
+  completed:    { type: Number, default: 0 },
+  completed_at: { type: String, default: null },
+  created_at:   { type: String },
+});
 
-function saveDB(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
+const reviewSchema = new mongoose.Schema({
+  todoId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Todo' },
+  stage:        { type: Number },
+  due_date:     { type: String },
+  completed:    { type: Number, default: 0 },
+  completed_at: { type: String, default: null },
+});
 
+const Todo   = mongoose.model('Todo', todoSchema);
+const Review = mongoose.model('Review', reviewSchema);
+
+// ── 유틸 ──────────────────────────────────────────
 function localDate() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function addDays(dateStr, days) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function normalizeTodo(t) {
+function formatTodo(t, activeReview) {
   return {
-    ...t,
-    perform_date: t.perform_date || null,
-    progress:     t.progress !== undefined ? t.progress : null,
-    start_time:   t.start_time || null,
-    end_time:     t.end_time || null,
+    id:           t._id,
+    text:         t.text,
+    importance:   t.importance,
+    deadline:     t.deadline,
+    perform_date: t.perform_date,
+    needs_review: t.needs_review,
+    progress:     t.progress,
+    start_time:   t.start_time,
+    end_time:     t.end_time,
+    completed:    t.completed,
+    completed_at: t.completed_at,
+    created_at:   t.created_at,
+    activeReview: activeReview || null,
   };
 }
 
-function getActiveReview(db, todoId) {
-  return db.reviews
-    .filter(r => r.todoId === todoId && !r.completed)
-    .sort((a, b) => a.stage - b.stage)[0] || null;
+async function getActiveReview(todoId) {
+  const reviews = await Review.find({ todoId, completed: 0 }).sort({ stage: 1 });
+  return reviews[0] || null;
 }
 
-function withActiveReview(todo, db) {
-  const t = normalizeTodo(todo);
+async function withActiveReview(todo) {
   let activeReview = null;
-  if (t.needs_review && t.completed) activeReview = getActiveReview(db, t.id);
-  return { ...t, activeReview };
+  if (todo.needs_review && todo.completed) {
+    const r = await getActiveReview(todo._id);
+    if (r) activeReview = { id: r._id, stage: r.stage, due_date: r.due_date };
+  }
+  return formatTodo(todo, activeReview);
 }
 
-// 완료 처리 + 복습 일정 생성 (내부 공통 함수)
-function markCompleted(todo, db) {
+async function markCompleted(todo) {
   const today = localDate();
-  todo.completed = 1;
+  todo.completed    = 1;
   todo.completed_at = today;
   if (todo.needs_review) {
-    db.reviews = db.reviews.filter(r => r.todoId !== todo.id);
-    db.reviews.push({
-      id: db.nextReviewId++, todoId: todo.id, stage: 0,
+    await Review.deleteMany({ todoId: todo._id });
+    await Review.create({
+      todoId: todo._id, stage: 0,
       due_date: addDays(today, INTERVALS[0]), completed: 0, completed_at: null,
     });
   }
 }
 
-// ── GET 전체 할일 ─────────────────────────────────
-app.get('/api/todos', (req, res) => {
-  const db = loadDB();
-  const sorted = [...db.todos].sort((a, b) => {
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    return new Date(b.created_at) - new Date(a.created_at);
-  });
-  res.json(sorted.map(t => withActiveReview(t, db)));
+// ── GET 전체 할일 ──────────────────────────────────
+app.get('/api/todos', async (req, res) => {
+  const todos = await Todo.find().sort({ completed: 1, created_at: -1 });
+  const result = await Promise.all(todos.map(t => withActiveReview(t)));
+  res.json(result);
 });
 
-// ── POST 할일 추가 ────────────────────────────────
-app.post('/api/todos', (req, res) => {
-  const { text, importance = 1, deadline, perform_date, needs_review = false,
-          start_time, end_time } = req.body;
+// ── POST 할일 추가 ─────────────────────────────────
+app.post('/api/todos', async (req, res) => {
+  const { text, importance=1, deadline, perform_date, needs_review=false, start_time, end_time } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
 
-  const db = loadDB();
-  const todo = {
-    id: db.nextTodoId++, text: text.trim(),
-    importance: Number(importance),
-    deadline: deadline || null,
-    perform_date: perform_date || null,
+  const todo = await Todo.create({
+    text: text.trim(), importance: Number(importance),
+    deadline: deadline||null, perform_date: perform_date||null,
     needs_review: needs_review ? 1 : 0,
-    progress: null,
-    start_time: start_time || null,
-    end_time: end_time || null,
-    completed: 0, completed_at: null,
+    start_time: start_time||null, end_time: end_time||null,
     created_at: localDate(),
-  };
-  db.todos.push(todo);
-  saveDB(db);
-  res.json(withActiveReview(todo, db));
+  });
+  res.json(await withActiveReview(todo));
 });
 
-// ── PUT 할일 수정 ─────────────────────────────────
-app.put('/api/todos/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const { text, importance, deadline, perform_date, needs_review,
-          progress, start_time, end_time } = req.body;
-  const db = loadDB();
-  const todo = db.todos.find(t => t.id === id);
+// ── PUT 할일 수정 ──────────────────────────────────
+app.put('/api/todos/:id', async (req, res) => {
+  const { text, importance, deadline, perform_date, needs_review, progress, start_time, end_time } = req.body;
+  const todo = await Todo.findById(req.params.id);
   if (!todo) return res.status(404).json({ error: 'not found' });
 
-  todo.text        = text.trim();
-  todo.importance  = Number(importance);
-  todo.deadline    = deadline    || null;
-  todo.perform_date= perform_date|| null;
-  todo.needs_review= needs_review ? 1 : 0;
-  todo.start_time  = start_time  || null;
-  todo.end_time    = end_time    || null;
+  todo.text         = text.trim();
+  todo.importance   = Number(importance);
+  todo.deadline     = deadline    || null;
+  todo.perform_date = perform_date|| null;
+  todo.needs_review = needs_review ? 1 : 0;
+  todo.start_time   = start_time  || null;
+  todo.end_time     = end_time    || null;
   if (progress !== undefined) todo.progress = progress;
+  if (todo.progress === 100 && !todo.completed) await markCompleted(todo);
 
-  // 진행률 100%면 자동 완료
-  if (todo.progress === 100 && !todo.completed) markCompleted(todo, db);
-
-  saveDB(db);
-  res.json(withActiveReview(todo, db));
+  await todo.save();
+  res.json(await withActiveReview(todo));
 });
 
-// ── DELETE 할일 삭제 ──────────────────────────────
-app.delete('/api/todos/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const db = loadDB();
-  db.todos   = db.todos.filter(t => t.id !== id);
-  db.reviews = db.reviews.filter(r => r.todoId !== id);
-  saveDB(db);
+// ── DELETE 할일 삭제 ───────────────────────────────
+app.delete('/api/todos/:id', async (req, res) => {
+  await Todo.findByIdAndDelete(req.params.id);
+  await Review.deleteMany({ todoId: req.params.id });
   res.json({ success: true });
 });
 
-// ── PUT 완료 토글 ─────────────────────────────────
-app.put('/api/todos/:id/complete', (req, res) => {
-  const id = Number(req.params.id);
+// ── PUT 완료 토글 ──────────────────────────────────
+app.put('/api/todos/:id/complete', async (req, res) => {
   const { completed } = req.body;
-  const db = loadDB();
-  const todo = db.todos.find(t => t.id === id);
+  const todo = await Todo.findById(req.params.id);
   if (!todo) return res.status(404).json({ error: 'not found' });
 
   if (completed) {
-    markCompleted(todo, db);
+    await markCompleted(todo);
     if (todo.progress === null) todo.progress = 100;
   } else {
     todo.completed = 0; todo.completed_at = null;
-    db.reviews = db.reviews.filter(r => r.todoId !== id);
+    await Review.deleteMany({ todoId: todo._id });
   }
-  saveDB(db);
-  res.json(withActiveReview(todo, db));
+  await todo.save();
+  res.json(await withActiveReview(todo));
 });
 
-// ── PUT 진행률 업데이트 ───────────────────────────
-app.put('/api/todos/:id/progress', (req, res) => {
-  const id = Number(req.params.id);
+// ── PUT 진행률 업데이트 ────────────────────────────
+app.put('/api/todos/:id/progress', async (req, res) => {
   const { progress } = req.body;
-  const db = loadDB();
-  const todo = db.todos.find(t => t.id === id);
+  const todo = await Todo.findById(req.params.id);
   if (!todo) return res.status(404).json({ error: 'not found' });
 
   todo.progress = progress;
-  if (progress === 100 && !todo.completed) markCompleted(todo, db);
-
-  saveDB(db);
-  res.json(withActiveReview(todo, db));
+  if (progress === 100 && !todo.completed) await markCompleted(todo);
+  await todo.save();
+  res.json(await withActiveReview(todo));
 });
 
-// ── PUT 수행날짜 설정 ─────────────────────────────
-app.put('/api/todos/:id/perform-date', (req, res) => {
-  const id = Number(req.params.id);
+// ── PUT 수행날짜 설정 ──────────────────────────────
+app.put('/api/todos/:id/perform-date', async (req, res) => {
   const { perform_date } = req.body;
-  const db = loadDB();
-  const todo = db.todos.find(t => t.id === id);
+  const todo = await Todo.findById(req.params.id);
   if (!todo) return res.status(404).json({ error: 'not found' });
 
   todo.perform_date = perform_date || null;
-  saveDB(db);
-  res.json(withActiveReview(todo, db));
+  await todo.save();
+  res.json(await withActiveReview(todo));
 });
 
-// ── PUT 복습 단계 완료 ────────────────────────────
-app.put('/api/reviews/:id/complete', (req, res) => {
-  const id = Number(req.params.id);
-  const db = loadDB();
-  const review = db.reviews.find(r => r.id === id);
+// ── PUT 복습 단계 완료 ─────────────────────────────
+app.put('/api/reviews/:id/complete', async (req, res) => {
+  const review = await Review.findById(req.params.id);
   if (!review) return res.status(404).json({ error: 'not found' });
 
   const today = localDate();
   review.completed = 1; review.completed_at = today;
+  await review.save();
 
   const nextStage = review.stage + 1;
   if (nextStage < INTERVALS.length) {
     const diff = INTERVALS[nextStage] - INTERVALS[review.stage];
-    db.reviews.push({
-      id: db.nextReviewId++, todoId: review.todoId, stage: nextStage,
+    await Review.create({
+      todoId: review.todoId, stage: nextStage,
       due_date: addDays(today, diff), completed: 0, completed_at: null,
     });
   }
-  saveDB(db);
   res.json({ success: true });
 });
 
-const PORT = 3001;
-app.listen(PORT, () => {
-  console.log('\n[Server] http://localhost:' + PORT);
-  console.log('[Server] Open http://localhost:5173\n');
-});
+// ── 서버 시작 ──────────────────────────────────────
+const PORT = process.env.PORT || 3001;
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    app.listen(PORT, () => console.log(`[Server] http://localhost:${PORT}`));
+    console.log('[MongoDB] 연결 성공');
+  })
+  .catch(err => {
+    console.error('[MongoDB] 연결 실패:', err.message);
+    process.exit(1);
+  });
