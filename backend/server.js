@@ -36,16 +36,7 @@ const Todo   = mongoose.model('Todo', todoSchema);
 const Review = mongoose.model('Review', reviewSchema);
 
 // ── 유틸 ──────────────────────────────────────────
-function localDate() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-function addDays(dateStr, days) {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
+const { localDate, addDays } = require('./lib/dates');
 
 function formatTodo(t, activeReview) {
   return {

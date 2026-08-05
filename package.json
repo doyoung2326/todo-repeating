@@ -6,7 +6,8 @@
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
     "start:backend": "node backend/server.js",
     "start:frontend": "cd frontend && npm run dev",
-    "vercel-build": "cd frontend && npm install && npm run build"
+    "vercel-build": "cd frontend && npm install && npm run build",
+    "test": "npm test --prefix backend && npm test --prefix frontend"
   },
   "dependencies": {
     "concurrently": "^8.2.2",
