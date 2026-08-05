@@ -125,7 +125,7 @@ export default function App() {
             e.preventDefault();
             leftDragCount.current = 0;
             setDraggingOverLeft(false);
-            const id = draggingTodoIdRef.current || Number(e.dataTransfer.getData('text/plain'));
+            const id = draggingTodoIdRef.current || e.dataTransfer.getData('text/plain');
             if (id) setPerformDate(id, today);
             draggingTodoIdRef.current = null;
           }}

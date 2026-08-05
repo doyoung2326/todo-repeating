@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__606107a7-23c8-46f9-abcb-294d7be8e2bb__notion-fetch",
+      "mcp__606107a7-23c8-46f9-abcb-294d7be8e2bb__notion-search",
+      "mcp__Claude_in_Chrome__find",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__606107a7-23c8-46f9-abcb-294d7be8e2bb__notion-get-users"
+    ]
+  }
+}
