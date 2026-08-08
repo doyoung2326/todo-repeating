@@ -25,12 +25,39 @@ const Review = mongoose.model('Review', loose(), 'reviews');
 async function main() {
   await mongoose.connect(process.env.MONGODB_URI);
 
+  // 어느 DB에 붙었는지 먼저 밝힌다. 잘 안 될 때 열에 아홉은 여기가 어긋나 있다.
+  const { host, name } = mongoose.connection;
+  console.log(`연결됨: ${host} / DB: ${name}`);
+
   const user = await User.findOne({ email });
   if (!user) {
-    throw new Error(`'${email}' 계정을 찾을 수 없습니다. 앱에서 먼저 회원가입해 주세요.`);
+    const accounts = await User.find({}, { email: 1 }).lean();
+    console.error(`\n'${email}' 계정을 이 DB에서 찾을 수 없습니다.`);
+    if (accounts.length === 0) {
+      console.error('이 DB에는 계정이 하나도 없습니다.');
+      console.error('배포된 앱에서 회원가입하셨다면, 로컬 backend/.env의 MONGODB_URI가');
+      console.error('운영 서버(Railway)와 다른 DB를 가리키고 있을 가능성이 큽니다.');
+    } else {
+      console.error(`이 DB에 있는 계정: ${accounts.map(u => u.email).join(', ')}`);
+      console.error('철자와 대소문자를 확인해 주세요.');
+    }
+    process.exitCode = 1;
+    return;
   }
 
   const orphan = { userId: { $exists: false } };
+  const [todoCount, reviewCount, totalTodos] = await Promise.all([
+    Todo.countDocuments(orphan),
+    Review.countDocuments(orphan),
+    Todo.countDocuments({}),
+  ]);
+  console.log(`전체 할일 ${totalTodos}개 중 주인 없는 것: 할일 ${todoCount}개, 복습 ${reviewCount}개`);
+
+  if (todoCount === 0 && reviewCount === 0) {
+    console.log('옮길 것이 없습니다. (이미 옮겼거나, 이 DB에 옛 데이터가 없습니다)');
+    return;
+  }
+
   const todos   = await Todo.updateMany(orphan, { $set: { userId: user._id } });
   const reviews = await Review.updateMany(orphan, { $set: { userId: user._id } });
 
