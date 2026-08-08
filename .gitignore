@@ -4,3 +4,5 @@ backend/data.json
 .env
 .env.local
 .env*.local
+# 배포 주소는 저장소가 아니라 Vercel 환경변수에 둔다 (도메인 변경 시 재커밋 불필요)
+.env.production
