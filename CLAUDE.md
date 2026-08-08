@@ -2,13 +2,33 @@
 
 공부 할일 관리 + 망각곡선 복습(1·3·7·16·30일) 웹앱.
 
-- `backend/` — Express + Mongoose API 서버 (CommonJS). 순수 로직은 `backend/lib/`에 분리.
+- `backend/app.js` — Express 앱·모델·라우트. DB 연결도 listen도 하지 않으므로 테스트에서 그대로 import한다.
+- `backend/server.js` — 실제 구동 전용(포트 리슨 + MongoDB 연결).
+- `backend/lib/` — DB·Express에 의존하지 않는 순수 로직.
 - `frontend/` — Vite + React 18 (JSX, ESM).
 - 실행: `npm start` (서버 + 화면 동시 실행) / 테스트: `npm test`
 
-## 새 기능은 반드시 TDD로 (Red → Green → Refactor)
+## 다중 사용자
 
-사용자가 새 기능 아이디어를 주면 **구현 코드부터 쓰지 않는다.** 아래 순서를 지킨다.
+이메일 + 비밀번호 회원가입, JWT(30일)를 프론트 `localStorage`에 보관한다.
+
+- `/api/auth/*`를 제외한 모든 `/api` 라우트는 `requireAuth`를 지난다. 새 라우트를 추가할 때
+  **반드시 `userId`로 범위를 좁힌다** — 남의 데이터는 404로 취급한다(존재 여부도 알리지 않는다).
+  할일 조회는 `findOwnTodo(req)`를 쓴다.
+- `Todo`·`Review` 문서는 모두 `userId`를 가진다. 새로 만들 때 빠뜨리면 저장이 실패한다.
+- 프론트는 `src/auth/session.js`(저장소)와 `src/auth/authFetch.js`(토큰 첨부 + 401 처리)를 지난다.
+  `SessionExpiredError`는 **실패가 아니다** — 이 예외에는 배너도 alert도 띄우지 않는다(이미 로그인 화면이다).
+- 서버에 `JWT_SECRET` 환경변수가 필요하다. 없으면 인증 라우트가 503을 준다(배포 시 Railway에 등록).
+- 사용자 구분이 없던 시절의 데이터는 `node backend/scripts/migrate-to-user.js <이메일>`로 옮긴다.
+
+## TDD는 사용자가 요청할 때만 (Red → Green → Refactor)
+
+**기본값은 TDD가 아니다.** 평소에는 그냥 구현하고, 필요하면 구현 후 테스트를 붙인다.
+
+사용자가 "TDD로", "테스트 먼저", "Red-Green" 같이 **명시적으로 요청한 경우에만** 아래 절차를 따른다.
+요청받지 않았는데 TDD 사이클을 시작하거나, "TDD로 할까요?"라고 되묻지 않는다.
+
+TDD 요청을 받았다면 **구현 코드부터 쓰지 않는다.** 아래 순서를 지킨다.
 각 단계 사이에서 멈추고 사용자 확인을 받는다. 여러 단계를 한 번에 처리하지 않는다.
 
 ### 0. 명세 확인
@@ -37,7 +57,7 @@
 테스트가 모두 통과하는 상태에서 가독성·구조만 개선한다. **기능은 추가하지 않는다.**
 리팩토링 후 `npm test`가 여전히 통과해야 한다. 깨졌으면 리팩토링이 아니라 버그다.
 
-### 규칙 요약
+### 규칙 요약 (TDD 요청 시에만 적용)
 - 한 사이클 = 기능 하나. 크면 쪼개서 여러 사이클로.
 - 테스트와 구현을 같은 응답에서 동시에 작성하지 않는다.
 - "테스트를 실행했다"고 말하려면 실제로 `npm test`를 돌린 출력이 있어야 한다.
@@ -45,9 +65,14 @@
 
 ## 테스트 작성 규칙
 
+(TDD 여부와 무관하게, 테스트를 쓸 때는 항상 적용)
+
 - 러너는 **Vitest**. 백엔드는 `backend/vitest.config.js`(node 환경), 프론트는 `frontend/vite.config.js`의 `test` 섹션(jsdom).
-- `backend/server.js`는 로드 시 MongoDB에 접속하므로 그대로 import하지 않는다.
-  새 로직은 DB에 의존하지 않는 순수 함수로 `backend/lib/`에 두고 그걸 테스트한다.
+- 순수 로직은 `backend/lib/`에 두고 직접 테스트한다. DB·Express를 끌어들이지 않는다.
+- API 라우트는 `backend/app.test.js`처럼 `mongodb-memory-server`를 띄우고 `backend/app.js`를
+  supertest로 호출한다. `backend/server.js`는 리슨·연결 전용이므로 import하지 않는다.
+- **사용자 범위를 넓히는 변경에는 격리 테스트를 같이 쓴다** — 다른 사용자로 접근하면 404인지,
+  원본 데이터가 그대로인지까지 확인한다(상태 코드만 보면 조용히 수정되는 버그를 놓친다).
 - 날짜는 `backend/lib/dates.js`의 `localDate` / `addDays` / `toDateStr`를 쓴다. 새로 만들지 않는다.
 - 테스트 이름은 한국어로, "무엇을 보장하는지" 서술형으로 쓴다.
 - 시간에 의존하는 테스트는 `vi.useFakeTimers()` + `vi.setSystemTime()`으로 고정한다.
