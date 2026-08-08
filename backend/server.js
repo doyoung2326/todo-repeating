@@ -2,10 +2,20 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const { connectWithRetry } = require('./lib/retry');
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+
+// DB가 아직 연결되지 않았으면 요청을 매달아두지 말고 즉시 503을 준다.
+// (mongoose는 기본적으로 명령을 버퍼링해서 연결될 때까지 응답이 지연된다)
+app.use('/api', (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ error: '데이터베이스 연결 준비 중입니다. 잠시 후 다시 시도해 주세요.' });
+  }
+  next();
+});
 
 const INTERVALS = [1, 3, 7, 16, 30];
 
@@ -194,12 +204,11 @@ app.put('/api/reviews/:id/complete', async (req, res) => {
 
 // ── 서버 시작 ──────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    app.listen(PORT, () => console.log(`[Server] http://localhost:${PORT}`));
-    console.log('[MongoDB] 연결 성공');
-  })
-  .catch(err => {
-    console.error('[MongoDB] 연결 실패:', err.message);
-    process.exit(1);
-  });
+
+// DB 연결 여부와 무관하게 먼저 리슨한다. 연결 실패로 프로세스를 죽이면
+// 배포 환경(Railway)이 컨테이너를 계속 재시작해 무한 크래시 루프가 된다.
+app.listen(PORT, () => console.log(`[Server] http://localhost:${PORT}`));
+
+connectWithRetry(() => mongoose.connect(process.env.MONGODB_URI), {
+  onError: (err, attempt) => console.error(`[MongoDB] 연결 실패 (${attempt}번째): ${err.message}`),
+}).then(() => console.log('[MongoDB] 연결 성공'));
