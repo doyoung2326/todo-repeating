@@ -19,7 +19,24 @@
 - 프론트는 `src/auth/session.js`(저장소)와 `src/auth/authFetch.js`(토큰 첨부 + 401 처리)를 지난다.
   `SessionExpiredError`는 **실패가 아니다** — 이 예외에는 배너도 alert도 띄우지 않는다(이미 로그인 화면이다).
 - 서버에 `JWT_SECRET` 환경변수가 필요하다. 없으면 인증 라우트가 503을 준다(배포 시 Railway에 등록).
-- 사용자 구분이 없던 시절의 데이터는 `node backend/scripts/migrate-to-user.js <이메일>`로 옮긴다.
+
+### 토큰 무효화
+
+`User.token_version`이 토큰 안의 `ver`와 다르면 그 토큰은 죽는다. 비밀번호를 바꿀 때 1 올려서
+기존 로그인을 한 번에 끊는다. 그래서 `requireAuth`는 서명만 보지 않고 **사용자를 실제로 읽는다**
+(요청당 조회 1회). 토큰을 발급하는 곳에서는 반드시 `issueToken(user)`을 쓴다 —
+버전을 빠뜨리면 발급 즉시 무효가 된다.
+
+`ver`가 없는 토큰은 `0`으로 읽는다. 이 기능을 넣기 전에 발급된 토큰을 살려두기 위한 것이다.
+
+### 운영 스크립트
+
+- `node backend/scripts/migrate-to-user.js <이메일>` — 사용자 구분이 없던 시절의 데이터를 계정에 붙인다.
+- `node backend/scripts/reset-password.js <이메일> <새 비밀번호>` — 비밀번호를 잊었을 때의 유일한 구제 수단
+  (이메일 발송 기반 찾기는 없다). 재설정하면 그 계정의 모든 로그인이 끊긴다.
+
+둘 다 여러 번 실행해도 안전하고, 조건이 맞지 않으면 아무것도 바꾸지 않고 실패한다.
+핵심 로직은 `module.exports`로 빼두어 `app.test.js`에서 직접 테스트한다.
 
 ## TDD는 사용자가 요청할 때만 (Red → Green → Refactor)
 

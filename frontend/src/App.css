@@ -80,7 +80,7 @@ button { cursor: pointer; font-family: inherit; }
   white-space: nowrap;
 }
 
-.app-logout {
+.app-header-btn {
   flex-shrink: 0;
   padding: .28rem .7rem;
   font-size: .78rem;
@@ -92,7 +92,7 @@ button { cursor: pointer; font-family: inherit; }
   transition: background .15s;
 }
 
-.app-logout:hover { background: rgba(255,255,255,.3); }
+.app-header-btn:hover { background: rgba(255,255,255,.3); }
 
 /* ── 에러 ────────────────────────────────────────── */
 .error-banner {
@@ -522,9 +522,11 @@ button { cursor: pointer; font-family: inherit; }
 
   .field-row { grid-template-columns: 1fr; }
 
-  /* 좁은 화면에서는 부제목을 접고 이메일·로그아웃만 남긴다 */
+  /* 좁은 화면에서는 부제목을 접고 이메일·버튼만 남긴다 */
   .app-sub { display: none; }
-  .app-user-email { max-width: 8rem; }
+  .app-user-email { max-width: 6rem; }
+  .app-user { gap: .35rem; }
+  .app-header-btn { padding: .28rem .5rem; font-size: .72rem; }
 }
 
 /* ══════════════════════════════════════════════════
@@ -620,6 +622,24 @@ button { cursor: pointer; font-family: inherit; }
 }
 
 .auth-switch:hover { text-decoration: underline; }
+
+/* ── 비밀번호 변경 모달 (모달·입력 스타일은 기존 것을 그대로 쓴다) ── */
+.pw-form {
+  display: flex;
+  flex-direction: column;
+  gap: .8rem;
+}
+
+.pw-success {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  font-size: .92rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--success);
+  background: var(--success-light);
+  border-radius: var(--radius-sm);
+}
 
 /* ══════════════════════════════════════════════════
    오늘 할 일 섹션 — 헤더 / 뷰탭 / 드롭존

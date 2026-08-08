@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeEmail,
   validateCredentials,
+  validatePassword,
   signToken,
   verifyToken,
   extractBearerToken,
@@ -53,10 +54,37 @@ describe('validateCredentials', () => {
   });
 });
 
+describe('validatePassword', () => {
+  it('8자 이상이면 통과시킨다', () => {
+    expect(validatePassword('12345678')).toEqual({ ok: true });
+  });
+
+  it('8자 미만이면 거절하고 이유를 알려준다', () => {
+    const result = validatePassword('1234567');
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('8자');
+  });
+
+  it('비어 있거나 문자열이 아니면 거절한다', () => {
+    expect(validatePassword('').ok).toBe(false);
+    expect(validatePassword(undefined).ok).toBe(false);
+    expect(validatePassword(12345678).ok).toBe(false);
+  });
+});
+
 describe('signToken / verifyToken', () => {
   it('발급한 토큰에서 같은 사용자 id를 다시 꺼낸다', () => {
     const token = signToken('507f1f77bcf86cd799439011', SECRET);
-    expect(verifyToken(token, SECRET)).toBe('507f1f77bcf86cd799439011');
+    expect(verifyToken(token, SECRET).sub).toBe('507f1f77bcf86cd799439011');
+  });
+
+  it('토큰 버전을 함께 담아 그대로 돌려준다', () => {
+    const token = signToken('abc', SECRET, { version: 3 });
+    expect(verifyToken(token, SECRET).ver).toBe(3);
+  });
+
+  it('버전을 주지 않으면 0으로 발급한다', () => {
+    expect(verifyToken(signToken('abc', SECRET), SECRET).ver).toBe(0);
   });
 
   it('다른 비밀키로 검증하면 null을 준다', () => {
