@@ -703,6 +703,14 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 }
 .field-input:focus { outline: none; border-color: var(--accent); }
 
+/* 날짜·시간 입력은 브라우저 기본 모양일 때 스스로 최소 너비를 정해서 칸 밖으로
+   삐져나온다. 기본 모양을 끄면 우리가 준 폭을 따른다. 누르면 뜨는 선택기는 그대로다. */
+.field-input[type="date"],
+.field-input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* 두 칸이 들어갈 폭이면 나란히, 아니면 알아서 한 줄씩 쌓인다.
    고정 1fr 1fr 로 두면 좁은 폰에서 날짜 칸이 밀려 나가 가로 스크롤이 생겼다. */
 .field-error {
@@ -714,11 +722,14 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   border-radius: var(--radius-sm);
 }
 
-/* 두 칸이 들어갈 폭이면 나란히, 아니면 알아서 한 줄씩 쌓인다.
-   최소 10rem — 이보다 좁으면 날짜 입력이 읽기 어려워서 차라리 쌓는 편이 낫다. */
+/* 두 칸이 들어갈 폭이면 나란히, 아니면 한 줄씩 쌓인다.
+   최소 13rem은 넉넉해 보이지만 그래야 하는 이유가 있다 — iOS Safari의 날짜 입력은
+   width: 100%도 min-width: 0도 무시하고 제 최소 너비(≈190px)를 고집해서, 칸이
+   그보다 좁으면 입력칸이 옆 칸을 침범한다. 폰 폭에서는 아예 쌓아서 겹칠 자리를 없앤다.
+   (넓은 화면의 폼 창은 폭이 520px이라 두 칸이 그대로 나란히 선다) */
 .field-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr));
   gap: .6rem;
 }
 
