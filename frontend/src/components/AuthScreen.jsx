@@ -57,14 +57,13 @@ export default function AuthScreen({ api, onAuth }) {
     <div className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
         <div className="auth-brand">
-          <span className="auth-logo">📚</span>
-          <h1>공부 할일 관리</h1>
+          <h1>공부 할 일 관리</h1>
           <p>망각곡선 복습으로 효율적인 학습을</p>
         </div>
 
         <h2 className="auth-heading">{isRegister ? '회원가입' : '로그인'}</h2>
 
-        {error && <div className="auth-error">⚠️ {error}</div>}
+        {error && <div className="auth-error">{error}</div>}
 
         <label className="auth-field">
           <span>이메일</span>

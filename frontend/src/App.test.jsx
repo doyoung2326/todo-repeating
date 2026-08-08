@@ -56,12 +56,47 @@ describe('App — 로그인하지 않은 상태', () => {
     expect(await loginScreen()).toBeInTheDocument();
   });
 
-  it('로그인 화면에서는 할일 목록을 요청하지 않는다', async () => {
+  it('로그인 화면에서는 할 일 목록을 요청하지 않는다', async () => {
     const fetchMock = mockApi({});
     render(<App />);
 
     await loginScreen();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('App — 넓은 화면에서도 할 일 추가는 + 버튼으로', () => {
+  it('추가 폼이 목록 위 자리를 상시 차지하지 않는다', async () => {
+    saveSession(SESSION);
+    mockApi({ 'GET /todos': () => res(200, [TODO]) });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+
+    expect(screen.queryByRole('heading', { name: '할 일 추가' })).not.toBeInTheDocument();
+  });
+
+  it('+ 버튼을 누르면 폼이 겹침 창으로 열린다', async () => {
+    saveSession(SESSION);
+    mockApi({ 'GET /todos': () => res(200, [TODO]) });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '할 일 추가' }));
+
+    expect(screen.getByRole('dialog', { name: '할 일 추가' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/내용/)).toBeInTheDocument();
+  });
+
+  it('수정도 같은 창에서 한다', async () => {
+    saveSession(SESSION);
+    mockApi({ 'GET /todos': () => res(200, [TODO]) });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+
+    await userEvent.setup().click(screen.getByTitle('수정'));
+
+    expect(screen.getByRole('dialog', { name: '할 일 수정' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('수학 문제집')).toBeInTheDocument();
   });
 });
 
@@ -76,7 +111,7 @@ describe('App — 401 자동 로그아웃', () => {
     expect(loadSession()).toBe(null);
   });
 
-  it('할일을 고치는 도중 401을 받아도 로그인 화면으로 돌아간다', async () => {
+  it('할 일을 고치는 도중 401을 받아도 로그인 화면으로 돌아간다', async () => {
     saveSession(SESSION);
     mockApi({
       'GET /todos':        () => res(200, [TODO]),
@@ -156,12 +191,12 @@ describe('App — 로그인한 상태', () => {
     // 수행날짜가 지났는데 진행률이 비어 있으면 앱 시작 시 모달이 뜬다
     mockApi({ 'GET /todos': () => res(200, [{ ...TODO, perform_date: '2020-01-01' }]) });
     render(<App />);
-    await screen.findByText('📊 진행률 확인');
+    await screen.findByText('진행률 확인');
 
     await userEvent.setup().click(screen.getByRole('button', { name: '로그아웃' }));
 
     expect(await loginScreen()).toBeInTheDocument();
-    expect(screen.queryByText('📊 진행률 확인')).not.toBeInTheDocument();
+    expect(screen.queryByText('진행률 확인')).not.toBeInTheDocument();
   });
 
   it('헤더의 비밀번호 변경을 누르면 입력 폼이 열린다', async () => {

@@ -1,6 +1,6 @@
-const STAGE_LABELS = ['1일차', '3일차', '7일차', '16일차', '30일차'];
-const IMP_COLOR    = { 1: '#3b82f6', 2: '#f59e0b', 3: '#ef4444' };
-const IMP_LABEL    = { 1: '낮음', 2: '중간', 3: '높음' };
+import { STAGE_LABELS, IMP_LABELS, progressColor } from '../theme';
+import MoreMenu from './MoreMenu';
+import { PinIcon, EditIcon, TrashIcon } from './icons';
 
 function daysDiff(dateStr, today) {
   return Math.round((new Date(dateStr + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
@@ -9,58 +9,63 @@ function daysDiff(dateStr, today) {
 function ReviewBadge({ review, today, onCompleteReview }) {
   const diff  = daysDiff(review.due_date, today);
   const stage = STAGE_LABELS[review.stage];
+
   if (diff < 0) return (
-    <div className="review-tag overdue">
-      🔄 {stage} — {Math.abs(diff)}일 지남
+    <span className="review-tag overdue">
+      {stage} 복습 — {Math.abs(diff)}일 지남
       <button className="tag-btn" onClick={e => { e.stopPropagation(); onCompleteReview(review.id); }}>완료</button>
-    </div>
+    </span>
   );
   if (diff === 0) return (
-    <div className="review-tag today-review">
-      🔄 {stage} — 오늘!
+    <span className="review-tag today-review">
+      {stage} 복습 — 오늘
       <button className="tag-btn" onClick={e => { e.stopPropagation(); onCompleteReview(review.id); }}>완료</button>
-    </div>
+    </span>
   );
-  return <div className="review-tag upcoming">🔄 {stage} — D-{diff}</div>;
+  return <span className="review-tag upcoming">{stage} 복습 — D-{diff}</span>;
 }
 
-export default function TodoItem({ todo, today, onComplete, onEdit, onDelete, onCompleteReview, onAddToToday, onDragStart, onDragEnd }) {
+export default function TodoItem({
+  todo, today, compact,
+  onComplete, onEdit, onDelete, onCompleteReview, onAddToToday, onDragStart, onDragEnd,
+}) {
   const done        = !!todo.completed;
   const needsReview = !!todo.needs_review;
-  const c           = IMP_COLOR[todo.importance];
 
   // 마감일 태그
   let deadlineTag = null;
   if (todo.deadline && !done) {
     const diff = daysDiff(todo.deadline, today);
-    if      (diff < 0)   deadlineTag = <span className="dl-tag dl-over">📅 {Math.abs(diff)}일 지남</span>;
-    else if (diff === 0) deadlineTag = <span className="dl-tag dl-today">📅 오늘 마감</span>;
-    else if (diff <= 3)  deadlineTag = <span className="dl-tag dl-soon">📅 D-{diff}</span>;
-    else                 deadlineTag = <span className="dl-tag dl-normal">📅 D-{diff}</span>;
+    if      (diff < 0)   deadlineTag = <span className="dl-tag dl-over">마감 {Math.abs(diff)}일 지남</span>;
+    else if (diff === 0) deadlineTag = <span className="dl-tag dl-today">오늘 마감</span>;
+    else if (diff <= 3)  deadlineTag = <span className="dl-tag dl-soon">마감 D-{diff}</span>;
+    else                 deadlineTag = <span className="dl-tag dl-normal">마감 D-{diff}</span>;
   }
 
   // 수행날짜 태그
   let performTag = null;
   if (todo.perform_date && !done) {
     const diff = daysDiff(todo.perform_date, today);
-    if      (diff < 0)   performTag = <span className="dl-tag dl-over">🗓 {Math.abs(diff)}일 전 수행</span>;
-    else if (diff === 0) performTag = <span className="dl-tag dl-today">🗓 오늘 수행</span>;
-    else                 performTag = <span className="dl-tag dl-normal">🗓 D-{diff} 수행</span>;
+    if      (diff < 0)   performTag = <span className="dl-tag dl-over">{Math.abs(diff)}일 전 수행</span>;
+    else if (diff === 0) performTag = <span className="dl-tag dl-today">오늘 수행</span>;
+    else                 performTag = <span className="dl-tag dl-normal">D-{diff} 수행</span>;
   }
 
   const pct      = todo.progress ?? 0;
-  const barColor = pct < 30 ? '#ef4444' : pct < 70 ? '#f59e0b' : '#10b981';
+  const barColor = progressColor(pct);
 
   const showReview = done && needsReview;
   const allDone    = showReview && !todo.activeReview;
 
-  // 오늘 수행 미등록 여부
+  // 오늘 수행으로 아직 안 올린 항목에만 등록 버튼을 준다
   const notPinnedToday = !done && todo.perform_date !== today;
+  const canPin         = notPinnedToday && !!onAddToToday;
 
   return (
     <div className={`todo-item${done ? ' done' : ''}`}>
 
-      {/* 드래그 핸들 — 이 span만 draggable로 설정해 checkbox 충돌 방지 */}
+      {/* 드래그 핸들 — 이 span만 draggable로 두어 체크박스와 충돌하지 않게 한다.
+          터치에서는 draggable이 동작하지 않으므로 CSS가 넓은 화면에서만 보여준다. */}
       {!done && (
         <span
           className="drag-handle"
@@ -81,13 +86,16 @@ export default function TodoItem({ todo, today, onComplete, onEdit, onDelete, on
       <div className="todo-body">
         <div className="todo-top">
           <span className={`todo-text${done ? ' struck' : ''}`}>{todo.text}</span>
-          <span className="imp-tag" style={{ background: c + '22', color: c, borderColor: c + '55' }}>
-            {IMP_LABEL[todo.importance]}
+          <span
+            className="imp-tag"
+            style={{ background: `var(--imp-${todo.importance}-bg)`, color: `var(--imp-${todo.importance}-fg)` }}
+          >
+            {IMP_LABELS[todo.importance]}
           </span>
           {needsReview && !done && <span className="review-pending-tag">복습 예정</span>}
           {todo.start_time && (
             <span className="time-tag">
-              🕐 {todo.start_time}{todo.end_time ? `–${todo.end_time}` : ''}
+              {todo.start_time}{todo.end_time ? `–${todo.end_time}` : ''}
             </span>
           )}
         </div>
@@ -98,7 +106,7 @@ export default function TodoItem({ todo, today, onComplete, onEdit, onDelete, on
           {showReview && !allDone && (
             <ReviewBadge review={todo.activeReview} today={today} onCompleteReview={onCompleteReview} />
           )}
-          {allDone && <span className="review-tag done-tag">🎓 전체 복습 완료</span>}
+          {allDone && <span className="review-tag done-tag">복습 전부 완료</span>}
         </div>
 
         {!done && todo.progress !== null && (
@@ -110,18 +118,34 @@ export default function TodoItem({ todo, today, onComplete, onEdit, onDelete, on
       </div>
 
       <div className="todo-actions">
-        {/* 오늘 할 일 등록 버튼 (수행날짜가 오늘이 아닌 미완료 항목에만 표시) */}
-        {notPinnedToday && onAddToToday && (
-          <button
-            className="icon-btn pin"
-            title="오늘 할 일로 등록"
-            onClick={() => onAddToToday(todo.id)}
-          >📌</button>
+        {/* 좁은 화면: 주된 행동만 버튼으로 남기고 나머지는 ⋯ 안으로.
+            넓은 화면: 아이콘 버튼 세 개를 그대로 보여준다. */}
+        {compact ? (
+          <>
+            {canPin && (
+              <button className="pill-btn sm" title="오늘 할 일로 등록"
+                onClick={() => onAddToToday(todo.id)}>오늘로</button>
+            )}
+            <MoreMenu
+              label={`${todo.text} 항목 메뉴`}
+              items={[
+                ...(done ? [] : [{ label: '수정', onSelect: () => onEdit(todo) }]),
+                { label: '삭제', danger: true, onSelect: () => onDelete(todo.id) },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            {canPin && (
+              <button className="icon-btn pin" title="오늘 할 일로 등록"
+                onClick={() => onAddToToday(todo.id)}><PinIcon /></button>
+            )}
+            {!done && (
+              <button className="icon-btn" title="수정" onClick={() => onEdit(todo)}><EditIcon /></button>
+            )}
+            <button className="icon-btn del" title="삭제" onClick={() => onDelete(todo.id)}><TrashIcon /></button>
+          </>
         )}
-        {!done && (
-          <button className="icon-btn" title="수정" onClick={() => onEdit(todo)}>✏️</button>
-        )}
-        <button className="icon-btn del" title="삭제" onClick={() => onDelete(todo.id)}>🗑️</button>
       </div>
     </div>
   );

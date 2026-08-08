@@ -21,20 +21,25 @@ const renderList = (incomplete = [], completed = []) =>
   );
 
 describe('TodoList', () => {
-  it('할일이 하나도 없으면 빈 상태 안내를 보여준다', () => {
+  it('할 일이 하나도 없으면 빈 상태 안내를 보여준다', () => {
     renderList();
-    expect(screen.getByText(/아직 할일이 없어요/)).toBeInTheDocument();
+    expect(screen.getByText(/아직 할 일이 없어요/)).toBeInTheDocument();
   });
 
-  it('진행 중 할일을 개수와 함께 보여준다', () => {
+  it('진행 중 할 일을 개수와 함께 보여준다', () => {
     renderList([todo('1', '수학 문제집'), todo('2', '영어 단어')]);
     expect(screen.getByText('수학 문제집')).toBeInTheDocument();
     expect(screen.getByText('영어 단어')).toBeInTheDocument();
-    expect(screen.getByText(/진행 중/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /진행 중/ })).toHaveTextContent('2');
+  });
+
+  it('완료한 할 일은 완료 섹션에 개수와 함께 보여준다', () => {
+    renderList([todo('1', '수학 문제집')], [{ ...todo('2', '영어 단어'), completed: 1 }]);
+    expect(screen.getByRole('heading', { name: /완료/ })).toHaveTextContent('1');
   });
 
   it('완료 목록이 비어 있으면 완료 섹션을 그리지 않는다', () => {
     renderList([todo('1', '수학 문제집')]);
-    expect(screen.queryByText(/✅ 완료/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /완료/ })).not.toBeInTheDocument();
   });
 });

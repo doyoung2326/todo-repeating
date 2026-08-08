@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { progressColor } from '../theme';
 
 export default function ProgressCheckModal({ items, onSave, onClose }) {
   const [index, setIndex]       = useState(0);
@@ -16,13 +17,13 @@ export default function ProgressCheckModal({ items, onSave, onClose }) {
   const handleSkip = () => advance();
 
   const pct = progress;
-  const barColor = pct < 30 ? '#ef4444' : pct < 70 ? '#f59e0b' : '#10b981';
+  const barColor = progressColor(pct);
 
   return (
     <div className="modal-overlay">
       <div className="modal-card">
         <div className="modal-head">
-          <h2 className="modal-title">📊 진행률 확인</h2>
+          <h2 className="modal-title">진행률 확인</h2>
           {items.length > 1 && (
             <span className="modal-counter">{index + 1} / {items.length}</span>
           )}
@@ -32,13 +33,13 @@ export default function ProgressCheckModal({ items, onSave, onClose }) {
           수행 예정이었던 항목의 진행률을 입력해주세요.
         </p>
 
-        <div className="modal-perform-date">📅 수행날짜: <strong>{current.perform_date}</strong></div>
+        <div className="modal-perform-date">수행날짜: <strong>{current.perform_date}</strong></div>
         <div className="modal-item-text">{current.text}</div>
 
         <div className="slider-wrap">
           <div className="slider-value-row">
             <span className="slider-value" style={{ color: barColor }}>{pct}%</span>
-            {pct === 100 && <span className="auto-complete-hint">✅ 자동 완료 처리됩니다</span>}
+            {pct === 100 && <span className="auto-complete-hint">자동 완료 처리됩니다</span>}
           </div>
           <input
             type="range" min="0" max="100" step="5"
