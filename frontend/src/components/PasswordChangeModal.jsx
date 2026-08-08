@@ -43,7 +43,7 @@ export default function PasswordChangeModal({ onSubmit, onClose }) {
     <div className="modal-overlay">
       <div className="modal-card">
         <div className="modal-head">
-          <h2 className="modal-title">🔑 비밀번호 변경</h2>
+          <h2 className="modal-title">비밀번호 변경</h2>
         </div>
 
         {done ? (

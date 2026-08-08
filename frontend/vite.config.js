@@ -103,6 +103,28 @@ export default defineConfig(({ mode }) => {
         // 여기서 캐시하는 건 앱 셸(정적 자산)뿐이다. 오프라인에서도 화면은 뜨지만
         // 목록 갱신은 네트워크가 있어야 된다.
         includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'pwa-source.svg'],
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+          // 제목용 명조는 외부에서 받아오므로 앱 셸 프리캐시에 들어가지 않는다.
+          // 한 번 받은 뒤에는 여기에 저장해 둬서 오프라인에서도 고딕으로 떨어지지 않게 한다.
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
+              handler: 'StaleWhileRevalidate',
+              options: { cacheName: 'google-fonts-css' },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\//,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-files',
+                expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                // 글꼴은 CORS 없이 오는 불투명 응답(status 0)일 수 있다
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+          ],
+        },
         manifest: {
           name: '공부 할 일 관리',
           short_name: '공부투두',
