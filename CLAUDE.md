@@ -75,6 +75,19 @@ JS가 인라인 스타일로 색을 넣어야 하면 `src/theme.js`가 주는 `v
 - 한 줄로 못박은 글자(`white-space: nowrap`)의 줄 높이는 CSS에 고정해 둔다 —
   JS 쪽 최소 높이 계산이 그 값에 기대고 있다(`TodaySection`의 `MIN_BLOCK_PX`).
 
+### 설치한 앱(PWA)의 갱신
+
+홈 화면에 설치한 앱은 캐시에서 뜨므로 배포해도 저절로 최신이 되지 않는다.
+**서비스 워커는 `registerType: 'prompt'`다** — 새 버전이 설치돼도 나서지 않고 기다리고,
+`UpdatePrompt`가 "새 버전이 있습니다"를 띄운 뒤 사용자가 누를 때 교체한다.
+자동으로 갈아끼우면 할 일을 적던 도중에 화면이 다시 읽혀 입력이 날아간다.
+
+- 등록은 `src/registerServiceWorker.js`가 직접 한다. `injectRegister: null`인 이유 —
+  플러그인이 넣어주는 스크립트는 등록만 하고 새 버전을 알려주지 않는다.
+- 교체는 대기 중인 워커에 `{ type: 'SKIP_WAITING' }`을 보내고 `controllerchange`에서
+  새로고침한다. 워크박스가 만든 워커가 이 메시지를 처리한다 —
+  **`registerType`을 바꾸면 이 약속이 깨지므로 `dist/sw.js`에서 확인할 것.**
+
 ### 반응형 — 경계는 700 / 1100px 둘뿐
 
 | 폭 | 레이아웃 |

@@ -92,7 +92,13 @@ export default defineConfig(({ mode }) => {
       react(),
       themeWriter(),
       VitePWA({
-        registerType: 'autoUpdate',
+        // 새 버전이 나와도 스스로 나서지 않고 대기한다. 언제 바꿀지는 사용자가 정한다
+        // (src/registerServiceWorker.js + components/UpdatePrompt.jsx).
+        // 자동으로 갈아끼우면 할 일을 적던 도중에 화면이 다시 읽혀 입력이 날아간다.
+        registerType: 'prompt',
+        // 등록은 우리가 직접 한다 — 플러그인이 넣어주는 스크립트는 등록만 하고
+        // 새 버전이 준비된 것을 알려주지 않는다.
+        injectRegister: null,
         // API 응답은 워크박스가 캐시하지 않는다 — 할 일 데이터는 항상 최신이어야 하므로
         // 여기서 캐시하는 건 앱 셸(정적 자산)뿐이다. 오프라인에서도 화면은 뜨지만
         // 목록 갱신은 네트워크가 있어야 된다.

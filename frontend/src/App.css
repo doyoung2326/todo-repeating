@@ -69,8 +69,10 @@
   --font-display: 'Nanum Myeongjo', 'Batang', ui-serif, Georgia, serif;
   --font-mono:    ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
-  /* 하단 탭바 높이 — 스크롤 여백 계산에 쓴다 */
-  --tabbar-h:    56px;
+  /* 떠 있는 하단 탭바 — 높이와 화면 끝에서 띄우는 거리.
+     + 버튼 위치와 열 아래 여백이 이 값들로 계산된다. */
+  --tabbar-h:    52px;
+  --tabbar-gap:  .7rem;
 }
 /* theme:end */
 
@@ -240,9 +242,9 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   overscroll-behavior: contain;
   flex-direction: column;
   gap: var(--gap);
-  /* 탭바는 이 열의 형제라 자리를 스스로 차지한다. 여백이 필요한 건 그 위에 떠 있는
-     + 버튼 때문 — 마지막 항목이 가리지 않을 만큼만 둔다. 어느 폭에서나 필요하다. */
-  padding-bottom: 5rem;
+  /* 탭바와 + 버튼이 이 열 위에 떠 있으므로, 마지막 항목이 가리지 않을 만큼 비워둔다.
+     (탭바 + 띄운 거리 + 그 위의 + 버튼) */
+  padding-bottom: calc(var(--tabbar-h) + var(--tabbar-gap) * 2 + 52px + 1rem);
 }
 
 .app[data-tab="today"]  .col-today  { display: flex; }
@@ -667,7 +669,14 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   font-weight: 800;
 }
 
-.field { display: flex; flex-direction: column; gap: .3rem; }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  /* 그리드/플렉스 칸의 기본 최소 크기는 min-content다. 날짜·시간 입력은 브라우저가
+     정한 최소 너비가 커서, 이걸 풀어주지 않으면 칸이 제 자리를 벗어나 옆 칸과 겹친다. */
+  min-width: 0;
+}
 
 .field-label {
   font-size: .8rem;
@@ -705,9 +714,11 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   border-radius: var(--radius-sm);
 }
 
+/* 두 칸이 들어갈 폭이면 나란히, 아니면 알아서 한 줄씩 쌓인다.
+   최소 10rem — 이보다 좁으면 날짜 입력이 읽기 어려워서 차라리 쌓는 편이 낫다. */
 .field-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(9.5rem, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
   gap: .6rem;
 }
 
@@ -913,60 +924,78 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 /* ══════════════════════════════════════════════════
    모바일 셸 — 하단 탭바 · FAB · 바텀 시트
 ══════════════════════════════════════════════════ */
+/* 화면 아래에 떠 있는 알약 모양 탭바. 바닥에 붙여 화면을 가로지르는 대신
+   여백을 두고 떠 있게 해서, 뒤 내용이 살짝 비치도록 한다. */
 .tabbar {
-  flex-shrink: 0;
-  display: flex;
-  background: var(--card);
-  border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
   z-index: 40;
+  display: flex;
+  gap: .2rem;
+  padding: .3rem;
+  max-width: calc(100% - 2rem);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  box-shadow: 0 6px 24px rgba(43,50,45,.16), 0 1px 2px rgba(43,50,45,.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+/* 반투명을 못 쓰는 브라우저에서는 그냥 불투명하게 */
+@supports not (backdrop-filter: blur(1px)) {
+  .tabbar { background: var(--card); }
 }
 
 .tabbar-btn {
-  flex: 1;
   position: relative;
-  min-height: var(--tabbar-h);
+  flex: 0 0 auto;
+  min-width: 4.6rem;
+  min-height: calc(var(--tabbar-h) - .6rem);
+  padding: .3rem .5rem;
+  border-radius: 999px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: .15rem;
-  font-size: .7rem;
+  gap: .1rem;
+  font-size: .68rem;
   font-weight: 650;
   color: var(--muted);
-  transition: color .15s;
+  transition: color .15s, background .15s;
 }
-.tabbar-btn svg { width: 20px; height: 20px; display: block; }
-.tabbar-btn.active { color: var(--accent); }
+.tabbar-btn svg { width: 21px; height: 21px; display: block; }
+.tabbar-btn.active { color: var(--accent); background: var(--accent-soft); }
+.tabbar-btn:active { transform: scale(.96); }
 
 /* 처리할 게 있는 탭에만 점을 찍는다 */
 .tabbar-dot {
   position: absolute;
-  top: .6rem;
-  margin-left: 1.15rem;
+  top: .3rem;
+  margin-left: 1.3rem;
   width: .4rem; height: .4rem;
   border-radius: 99px;
   background: var(--warn);
 }
 
+/* 탭바 바로 위에 띄운다 — 좌우로 나란히 두면 좁은 폰에서 겹친다 */
 .fab {
   position: absolute;
   right: 1rem;
-  bottom: calc(var(--tabbar-h) + 1rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--tabbar-h) + var(--tabbar-gap) * 2 + env(safe-area-inset-bottom, 0px));
   z-index: 45;
-  width: 54px; height: 54px;
-  border-radius: 99px;
+  width: 52px; height: 52px;
+  border-radius: 999px;
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 1.7rem;
-  font-weight: 300;
-  line-height: 1;
   display: grid;
   place-items: center;
-  box-shadow: 0 3px 12px rgba(43,50,45,.24);
-  transition: background .15s;
+  box-shadow: 0 4px 16px rgba(43,50,45,.26);
+  transition: background .15s, transform .1s;
 }
 .fab:hover { background: var(--accent-hover); }
+.fab:active { transform: scale(.94); }
 
 /* 할 일 추가/수정 창 — 좁으면 아래에서 올라오고, 넓으면 가운데로 뜬다 */
 .sheet-scrim {
@@ -1012,6 +1041,44 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   box-shadow: none;
   padding: 0;
 }
+
+/* ── 새 버전 안내 ─────────────────────────────────── */
+.update-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + var(--tabbar-gap) * 2 + 52px + 1rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 80;
+  max-width: calc(100% - 2rem);
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .5rem .6rem .5rem 1rem;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--card);
+  font-size: .85rem;
+  box-shadow: 0 6px 24px rgba(43,50,45,.28);
+}
+.update-prompt-text { white-space: nowrap; }
+.update-prompt-apply {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: .3rem .8rem;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 700;
+  background: var(--card);
+  color: var(--text);
+}
+.update-prompt-close {
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  border-radius: 999px;
+  color: inherit;
+  opacity: .7;
+}
+.update-prompt-close:hover { opacity: 1; }
 
 /* ══════════════════════════════════════════════════
    모달 (진행률 확인 · 비밀번호 변경)
@@ -1238,7 +1305,9 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
     --card-pad: calc(.95rem  * var(--space-scale));
     --row-pad:  calc(.55rem  * var(--space-scale));
     --tap:      34px;
-    --tabbar-h: 0px;
+    /* 탭바가 없으므로 + 버튼만 화면 모서리에서 띄운다 */
+    --tabbar-h:   0px;
+    --tabbar-gap: .5rem;
   }
 
   /* 하단 탭바와 계정 이니셜은 좁은 화면 전용. + 버튼은 어느 폭에서나 쓴다. */
@@ -1247,7 +1316,7 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   /* 세 열 모두 보이기 (탭 상태와 무관하게) */
   .app[data-tab] .col { display: flex; }
   /* 탭바가 없어진 만큼 줄이되, + 버튼이 마지막 항목을 가리지 않을 여백은 남긴다 */
-  .col { padding-bottom: 4rem; }
+  .col { padding-bottom: 5rem; }
 
   /* 오늘 할 일은 왼쪽 칸의 높이를 통째로 쓴다 — 타임라인은 세로로 긴 물건이라
      반 칸에 넣으면 계속 스크롤해야 한다. 오른쪽 칸은 목록과 복습이 위아래로 나눠 갖는다.

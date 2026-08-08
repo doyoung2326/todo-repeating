@@ -29,6 +29,13 @@ export const EditIcon = () => (
   </svg>
 );
 
+/** 더하기. 글자 '+'는 글꼴마다 광학 중심이 달라 버튼 한가운데에 놓이지 않는다. */
+export const PlusIcon = () => (
+  <svg {...base} width="1.6em" height="1.6em" strokeWidth={2}>
+    <path d="M12 5.5v13M5.5 12h13" />
+  </svg>
+);
+
 export const TrashIcon = () => (
   <svg {...base}>
     <path d="M4 7h16M10 4h4M6 7l1 13h10l1-13" />
