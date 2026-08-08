@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { localDate, addDays } = require('./lib/dates');
 const {
-  validateCredentials, normalizeEmail,
+  validateCredentials, validatePassword, normalizeEmail,
   signToken, verifyToken, extractBearerToken,
 } = require('./lib/auth');
 
@@ -34,6 +34,8 @@ app.use('/api', (req, res, next) => {
 const userSchema = new mongoose.Schema({
   email:         { type: String, required: true, unique: true },
   password_hash: { type: String, required: true },
+  // 비밀번호가 바뀔 때마다 올린다. 토큰에 박힌 값과 다르면 그 토큰은 죽는다.
+  token_version: { type: Number, default: 0 },
   created_at:    { type: String },
 });
 
@@ -128,15 +130,28 @@ function requireSecret(res) {
   return false;
 }
 
-function requireAuth(req, res, next) {
+const unauthorized = res => res.status(401).json({ error: '로그인이 필요합니다.' });
+
+// 서명만 보지 않고 사용자를 실제로 읽는다. 요청마다 조회가 하나 늘어나는 대신,
+// 비밀번호가 바뀐 뒤의 옛 토큰과 사라진 계정의 토큰을 막을 수 있다.
+const requireAuth = wrap(async (req, res, next) => {
   if (!requireSecret(res)) return;
-  const userId = verifyToken(extractBearerToken(req.headers.authorization), jwtSecret());
-  if (!userId) return res.status(401).json({ error: '로그인이 필요합니다.' });
-  req.userId = userId;
+
+  const payload = verifyToken(extractBearerToken(req.headers.authorization), jwtSecret());
+  if (!payload || !mongoose.Types.ObjectId.isValid(payload.sub)) return unauthorized(res);
+
+  const user = await User.findById(payload.sub);
+  if (!user || user.token_version !== payload.ver) return unauthorized(res);
+
+  req.userId = String(user._id);
+  req.user = user;
   next();
-}
+});
 
 const publicUser = user => ({ id: user._id, email: user.email });
+
+/** 그 사용자의 현재 토큰 버전으로 발급한다. 버전을 빠뜨리면 발급 즉시 무효가 된다. */
+const issueToken = user => signToken(user._id, jwtSecret(), { version: user.token_version });
 
 app.post('/api/auth/register', wrap(async (req, res) => {
   if (!requireSecret(res)) return;
@@ -160,7 +175,7 @@ app.post('/api/auth/register', wrap(async (req, res) => {
     throw err;
   }
 
-  res.json({ token: signToken(user._id, jwtSecret()), user: publicUser(user) });
+  res.json({ token: issueToken(user), user: publicUser(user) });
 }));
 
 app.post('/api/auth/login', wrap(async (req, res) => {
@@ -173,14 +188,36 @@ app.post('/api/auth/login', wrap(async (req, res) => {
     return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
   }
 
-  res.json({ token: signToken(user._id, jwtSecret()), user: publicUser(user) });
+  res.json({ token: issueToken(user), user: publicUser(user) });
 }));
 
-// 저장된 토큰이 아직 유효한지 확인하는 용도
-app.get('/api/auth/me', requireAuth, wrap(async (req, res) => {
-  const user = await User.findById(req.userId);
-  if (!user) return res.status(401).json({ error: '로그인이 필요합니다.' });
-  res.json({ user: publicUser(user) });
+// 저장된 토큰이 아직 유효한지 확인하는 용도 (requireAuth가 이미 사용자를 읽어둔다)
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ user: publicUser(req.user) });
+});
+
+// ── PUT 비밀번호 변경 ──────────────────────────────
+app.put('/api/auth/password', requireAuth, wrap(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const user = req.user;
+
+  const given = typeof currentPassword === 'string' ? currentPassword : '';
+  if (!await bcrypt.compare(given, user.password_hash)) {
+    return res.status(401).json({ error: '현재 비밀번호가 올바르지 않습니다.' });
+  }
+
+  const check = validatePassword(newPassword);
+  if (!check.ok) return res.status(400).json({ error: check.error });
+  if (newPassword === given) {
+    return res.status(400).json({ error: '새 비밀번호는 현재와 다른 값이어야 합니다.' });
+  }
+
+  user.password_hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  user.token_version += 1;   // 지금까지 발급된 토큰을 모두 무효로 만든다
+  await user.save();
+
+  // 방금 바꾼 기기까지 로그아웃시키면 불편하므로 새 토큰을 돌려준다
+  res.json({ token: issueToken(user) });
 }));
 
 // 여기부터 아래 모든 라우트는 로그인이 필요하다.

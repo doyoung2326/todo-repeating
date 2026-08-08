@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { app, User, Todo, Review } from './app.js';
+import { resetPassword } from './scripts/reset-password.js';
 
 let mongod;
 
@@ -145,6 +146,52 @@ describe('인증이 없는 요청', () => {
   });
 });
 
+describe('내 정보 확인', () => {
+  it('유효한 토큰이면 내 이메일을 준다', async () => {
+    const token = await signUp('a@example.com');
+
+    const res = await request(app).get('/api/auth/me').set(asUser(token));
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe('a@example.com');
+    expect(res.body.user).not.toHaveProperty('password_hash');
+  });
+
+  it('토큰이 없으면 401을 준다', async () => {
+    expect((await request(app).get('/api/auth/me')).status).toBe(401);
+  });
+});
+
+describe('토큰 버전 호환·방어', () => {
+  it('버전이 없던 시절에 발급된 토큰도 그대로 통한다', async () => {
+    // 이 기능을 배포하는 순간 이미 로그인해 있던 사람들이 튕기면 안 된다
+    await signUp('a@example.com');
+    const user = await User.findOne({ email: 'a@example.com' });
+    const legacy = jwt.sign({ sub: String(user._id) }, process.env.JWT_SECRET, { expiresIn: '30d' });
+
+    expect((await request(app).get('/api/todos').set(asUser(legacy))).status).toBe(200);
+  });
+
+  it('사용자 id 자리에 엉뚱한 값이 든 토큰은 500이 아니라 401을 준다', async () => {
+    const bogus = jwt.sign(
+      { sub: '이건-id가-아님', ver: 0 }, process.env.JWT_SECRET, { expiresIn: '30d' }
+    );
+
+    expect((await request(app).get('/api/todos').set(asUser(bogus))).status).toBe(401);
+  });
+
+  it('바꾼 비밀번호로 다시 로그인해 받은 토큰은 실제로 통한다', async () => {
+    const token = await signUp('a@example.com');
+    await request(app).put('/api/auth/password').set(asUser(token))
+      .send({ currentPassword: 'password1', newPassword: 'newpassword1' });
+
+    const login = await request(app)
+      .post('/api/auth/login').send({ email: 'a@example.com', password: 'newpassword1' });
+
+    expect((await request(app).get('/api/todos').set(asUser(login.body.token))).status).toBe(200);
+  });
+});
+
 describe('사용자별 데이터 격리', () => {
   it('내 목록에는 내 할일만 보인다', async () => {
     const a = await signUp('a@example.com');
@@ -244,6 +291,167 @@ describe('잘못된 요청 처리', () => {
     const a = await signUp('a@example.com');
     const res = await request(app).delete('/api/todos/이건-id가-아님').set(asUser(a));
     expect(res.status).toBe(404);
+  });
+});
+
+describe('비밀번호 변경', () => {
+  const change = (token, body) =>
+    request(app).put('/api/auth/password').set(asUser(token)).send(body);
+
+  const login = (email, password) =>
+    request(app).post('/api/auth/login').send({ email, password });
+
+  it('로그인하지 않으면 바꿀 수 없다', async () => {
+    const res = await request(app)
+      .put('/api/auth/password').send({ currentPassword: 'password1', newPassword: 'newpassword1' });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('현재 비밀번호가 틀리면 401이고 비밀번호는 그대로다', async () => {
+    const token = await signUp('a@example.com');
+
+    const res = await change(token, { currentPassword: 'wrongpassword', newPassword: 'newpassword1' });
+
+    expect(res.status).toBe(401);
+    expect((await login('a@example.com', 'password1')).status).toBe(200);
+  });
+
+  it('새 비밀번호가 8자 미만이면 400이고 바뀌지 않는다', async () => {
+    const token = await signUp('a@example.com');
+
+    const res = await change(token, { currentPassword: 'password1', newPassword: 'short' });
+
+    expect(res.status).toBe(400);
+    expect((await login('a@example.com', 'password1')).status).toBe(200);
+  });
+
+  it('새 비밀번호가 현재와 같으면 400이다', async () => {
+    const token = await signUp('a@example.com');
+
+    const res = await change(token, { currentPassword: 'password1', newPassword: 'password1' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('바꾸고 나면 새 비밀번호로 로그인되고 옛 비밀번호로는 안 된다', async () => {
+    const token = await signUp('a@example.com');
+
+    expect((await change(token, { currentPassword: 'password1', newPassword: 'newpassword1' })).status).toBe(200);
+
+    expect((await login('a@example.com', 'newpassword1')).status).toBe(200);
+    expect((await login('a@example.com', 'password1')).status).toBe(401);
+  });
+
+  it('새 비밀번호도 평문으로 저장하지 않는다', async () => {
+    const token = await signUp('a@example.com');
+
+    await change(token, { currentPassword: 'password1', newPassword: 'newpassword1' });
+
+    const user = await User.findOne({ email: 'a@example.com' });
+    expect(user.password_hash).not.toBe('newpassword1');
+  });
+});
+
+describe('비밀번호를 바꾸면 기존 토큰이 무효가 된다', () => {
+  const change = (token, body) =>
+    request(app).put('/api/auth/password').set(asUser(token)).send(body);
+
+  it('변경 전에 발급된 토큰은 더 이상 통하지 않는다', async () => {
+    const oldToken = await signUp('a@example.com');
+    await addTodo(oldToken, '내 할일');
+
+    await change(oldToken, { currentPassword: 'password1', newPassword: 'newpassword1' });
+
+    expect((await request(app).get('/api/todos').set(asUser(oldToken))).status).toBe(401);
+  });
+
+  it('변경 응답으로 받은 새 토큰은 그대로 쓸 수 있다', async () => {
+    const oldToken = await signUp('a@example.com');
+    await addTodo(oldToken, '내 할일');
+
+    const res = await change(oldToken, { currentPassword: 'password1', newPassword: 'newpassword1' });
+
+    expect(res.body.token).toEqual(expect.any(String));
+    const after = await request(app).get('/api/todos').set(asUser(res.body.token));
+    expect(after.status).toBe(200);
+    expect(after.body.map(t => t.text)).toEqual(['내 할일']);
+  });
+
+  it('남이 비밀번호를 바꿔도 내 토큰은 멀쩡하다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+
+    await change(b, { currentPassword: 'password1', newPassword: 'newpassword1' });
+
+    expect((await request(app).get('/api/todos').set(asUser(a))).status).toBe(200);
+  });
+
+  it('계정이 사라지면 그 토큰도 더 이상 통하지 않는다', async () => {
+    const token = await signUp('a@example.com');
+    await User.deleteMany({ email: 'a@example.com' });
+
+    expect((await request(app).get('/api/todos').set(asUser(token))).status).toBe(401);
+  });
+});
+
+describe('관리자 비밀번호 재설정 스크립트', () => {
+  it('해당 계정의 비밀번호를 재설정한다', async () => {
+    await signUp('a@example.com');
+
+    await resetPassword(User, 'a@example.com', 'resetpassword1');
+
+    const res = await request(app)
+      .post('/api/auth/login').send({ email: 'a@example.com', password: 'resetpassword1' });
+    expect(res.status).toBe(200);
+  });
+
+  it('재설정하면 그 계정의 기존 토큰이 전부 무효가 된다', async () => {
+    const token = await signUp('a@example.com');
+
+    await resetPassword(User, 'a@example.com', 'resetpassword1');
+
+    expect((await request(app).get('/api/todos').set(asUser(token))).status).toBe(401);
+  });
+
+  it('대소문자가 달라도 같은 계정으로 찾는다', async () => {
+    await signUp('a@example.com');
+
+    await resetPassword(User, 'A@Example.COM', 'resetpassword1');
+
+    const res = await request(app)
+      .post('/api/auth/login').send({ email: 'a@example.com', password: 'resetpassword1' });
+    expect(res.status).toBe(200);
+  });
+
+  it('없는 계정이면 아무것도 바꾸지 않고 실패한다', async () => {
+    await signUp('a@example.com');
+
+    await expect(resetPassword(User, 'nobody@example.com', 'resetpassword1')).rejects.toThrow();
+
+    const res = await request(app)
+      .post('/api/auth/login').send({ email: 'a@example.com', password: 'password1' });
+    expect(res.status).toBe(200);
+  });
+
+  it('재설정 후 새 비밀번호로 받은 토큰이 실제로 통한다', async () => {
+    await signUp('a@example.com');
+
+    await resetPassword(User, 'a@example.com', 'resetpassword1');
+    const login = await request(app)
+      .post('/api/auth/login').send({ email: 'a@example.com', password: 'resetpassword1' });
+
+    expect((await request(app).get('/api/todos').set(asUser(login.body.token))).status).toBe(200);
+  });
+
+  it('8자 미만이면 거절하고 비밀번호를 건드리지 않는다', async () => {
+    await signUp('a@example.com');
+
+    await expect(resetPassword(User, 'a@example.com', 'short')).rejects.toThrow(/8자/);
+
+    const res = await request(app)
+      .post('/api/auth/login').send({ email: 'a@example.com', password: 'password1' });
+    expect(res.status).toBe(200);
   });
 });
 

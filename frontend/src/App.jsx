@@ -5,6 +5,7 @@ import TodoList from './components/TodoList';
 import ReviewSection from './components/ReviewSection';
 import ProgressCheckModal from './components/ProgressCheckModal';
 import AuthScreen from './components/AuthScreen';
+import PasswordChangeModal from './components/PasswordChangeModal';
 import { loadSession, saveSession, clearSession } from './auth/session';
 import { createAuthFetch, SessionExpiredError } from './auth/authFetch';
 import './App.css';
@@ -23,11 +24,15 @@ export default function App() {
   const [error, setError]           = useState(null);
   const [editingTodo, setEditingTodo] = useState(null);
   const [progressItems, setProgressItems] = useState(null);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [isDraggingOverLeft, setDraggingOverLeft] = useState(false);
   const draggingTodoIdRef = useRef(null);
   const leftDragCount = useRef(0);
 
   const token = session?.token;
+  // 목록을 다시 받아올지 판단하는 기준. 토큰은 비밀번호를 바꿔도 갈리므로
+  // "누구인지"를 쓴다 — 같은 사람이면 토큰만 바뀌어도 다시 받을 이유가 없다.
+  const account = session?.user?.email;
 
   const logout = useCallback(() => {
     clearSession();
@@ -63,7 +68,7 @@ export default function App() {
 
   // 로그인 직후(그리고 앱 시작 시) 1회: 목록을 받아오고 진행률 미입력 항목을 확인
   useEffect(() => {
-    if (!token) { setLoading(false); return; }
+    if (!account) { setLoading(false); return; }
     setLoading(true);
     fetchTodos().then(data => {
       if (!data) return;
@@ -77,13 +82,28 @@ export default function App() {
       if (pending.length > 0) setProgressItems(pending);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [account]);
 
   async function apiCall(url, options = {}) {
     const res = await authFetch(url, options);
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      // 서버는 { error: "..." } 형태로 답한다. 원문 JSON을 그대로 보여주지 않는다.
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || `요청에 실패했습니다. (${res.status})`);
+    }
     return res.json();
   }
+
+  const changePassword = async (currentPassword, newPassword) => {
+    const { token: fresh } = await apiCall(`${API}/auth/password`, {
+      method: 'PUT',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    // 서버가 옛 토큰을 무효로 만들었으므로 새 토큰으로 갈아끼운다
+    const next = { ...session, token: fresh };
+    saveSession(next);
+    setSession(next);
+  };
 
   // 세션이 만료돼 로그인 화면으로 넘어간 경우에는 알림을 띄우지 않는다.
   function reportFailure(what, err) {
@@ -144,12 +164,20 @@ export default function App() {
         />
       )}
 
+      {changingPassword && (
+        <PasswordChangeModal
+          onSubmit={changePassword}
+          onClose={() => setChangingPassword(false)}
+        />
+      )}
+
       <header className="app-header">
         <span className="app-title">📚 공부 할일 관리</span>
         <span className="app-sub">망각곡선 복습으로 효율적인 학습을</span>
         <div className="app-user">
           <span className="app-user-email" title={session.user.email}>{session.user.email}</span>
-          <button className="app-logout" type="button" onClick={logout}>로그아웃</button>
+          <button className="app-header-btn" type="button" onClick={() => setChangingPassword(true)}>비밀번호 변경</button>
+          <button className="app-header-btn" type="button" onClick={logout}>로그아웃</button>
         </div>
       </header>
 

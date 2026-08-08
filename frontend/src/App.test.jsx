@@ -164,6 +164,41 @@ describe('App — 로그인한 상태', () => {
     expect(screen.queryByText('📊 진행률 확인')).not.toBeInTheDocument();
   });
 
+  it('헤더의 비밀번호 변경을 누르면 입력 폼이 열린다', async () => {
+    saveSession(SESSION);
+    mockApi({ 'GET /todos': () => res(200, []) });
+    render(<App />);
+    await screen.findByText('a@example.com');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '비밀번호 변경' }));
+
+    expect(await screen.findByLabelText('현재 비밀번호')).toBeInTheDocument();
+  });
+
+  it('비밀번호를 바꾸면 새 토큰을 저장하고 로그아웃되지 않는다', async () => {
+    saveSession(SESSION);
+    const fetchMock = mockApi({
+      'GET /todos':      () => res(200, []),
+      'PUT /auth/password': () => res(200, { token: 'brand.new.token' }),
+    });
+    render(<App />);
+    await screen.findByText('a@example.com');
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '비밀번호 변경' }));
+    await user.type(await screen.findByLabelText('현재 비밀번호'), 'password1');
+    await user.type(screen.getByLabelText('새 비밀번호'), 'newpassword1');
+    await user.click(screen.getByRole('button', { name: '변경' }));
+
+    expect(await screen.findByText(/변경되었습니다/)).toBeInTheDocument();
+    await waitFor(() => expect(loadSession()?.token).toBe('brand.new.token'));
+    expect(screen.queryByRole('button', { name: '로그인' })).not.toBeInTheDocument();
+
+    // 바뀐 토큰이 이후 요청에 실려야 한다
+    const changeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/password'));
+    expect(changeCall[1].headers.Authorization).toBe(`Bearer ${SESSION.token}`);
+  });
+
   it('로그아웃 뒤 다른 계정으로 로그인하면 그 계정의 목록을 새로 받아온다', async () => {
     saveSession(SESSION);
     const other = { token: 'other.token', user: { id: '2', email: 'b@example.com' } };
