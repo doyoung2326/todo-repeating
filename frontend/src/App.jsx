@@ -8,6 +8,7 @@ import AuthScreen from './components/AuthScreen';
 import PasswordChangeModal from './components/PasswordChangeModal';
 import BottomTabBar from './components/BottomTabBar';
 import BottomSheet from './components/BottomSheet';
+import { PlusIcon } from './components/icons';
 import useMediaQuery from './hooks/useMediaQuery';
 import { formatKoreanDate } from './theme';
 import { loadSession, saveSession, clearSession } from './auth/session';
@@ -357,7 +358,7 @@ export default function App() {
         aria-label="할 일 추가"
         onClick={() => { setEditingTodo(null); setSheetOpen(true); }}
       >
-        +
+        <PlusIcon />
       </button>
 
       {sheetOpen && (
