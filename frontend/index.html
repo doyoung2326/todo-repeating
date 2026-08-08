@@ -3,8 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#6366f1" />
     <title>📚 공부 할일 관리</title>
+
+    <!-- 기본 favicon: 이모지 SVG(빠른 시각 식별용) → 브라우저가 못 읽으면 favicon.ico로 폴백 -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+
+    <!-- iOS: 웹 매니페스트를 안 읽으므로 홈 화면 추가/standalone 실행은 이 태그들로 따로 지정 -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="공부투두" />
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3603524980732348"
+      crossorigin="anonymous"></script>
   </head>
   <body>
     <div id="root"></div>
