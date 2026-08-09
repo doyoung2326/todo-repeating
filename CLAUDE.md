@@ -1,12 +1,39 @@
 # study-todo-app
 
-공부 할 일 관리 + 망각곡선 복습(1·3·7·16·30일) 웹앱.
+공부 할 일 관리 + 망각곡선 복습(1·3·7·16·30일). 웹(PWA)과 앱(iOS·안드로이드)이
+**같은 서버를 보는 서로 다른 화면**이다.
 
 - `backend/app.js` — Express 앱·모델·라우트. DB 연결도 listen도 하지 않으므로 테스트에서 그대로 import한다.
 - `backend/server.js` — 실제 구동 전용(포트 리슨 + MongoDB 연결).
 - `backend/lib/` — DB·Express에 의존하지 않는 순수 로직.
-- `frontend/` — Vite + React 18 (JSX, ESM). 화면 규칙은 아래 "화면" 절을 먼저 읽는다.
-- 실행: `npm start` (서버 + 화면 동시 실행) / 테스트: `npm test`
+- `shared/` — 웹과 앱이 **함께 쓰는** 순수 로직. 아래 "공유 코드" 절을 먼저 읽는다.
+- `frontend/` — 웹. Vite + React 18 (JSX, ESM). 화면 규칙은 아래 "화면" 절을 먼저 읽는다.
+- `mobile/` — 앱. Expo SDK 57 + Expo Router (TypeScript). 아래 "앱" 절을 읽는다.
+- 실행: `npm start` (서버 + 웹) / `npm run start:mobile` (앱) / 테스트: `npm test`
+
+**`배포전-체크리스트.md`** — 개발 중에는 비워 두고 스토어에 올리기 직전에 채우는 값들
+(방침의 담당자 연락처, `ascAppId`, 방침 URL 등)과 손으로 눌러봐야 하는 목록.
+코드에 플레이스홀더로 박혀 있어 빌드도 테스트도 통과하므로, 지우거나 옮기지 않는다.
+
+## 공유 코드 (`shared/`)
+
+화면 기술을 모르는 계산만 여기 둔다 — 웹의 DOM도, 앱의 `View`도 모른다.
+`timeline`(타임라인 배치) · `dates`(날짜) · `labels`(말과 판단 기준) ·
+`session`(세션의 형태) · `authFetch`(토큰 fetch) · `apiUrl`(주소 가드).
+
+- **의존성이 없는 순수 ESM이다.** 라이브러리를 쓰는 코드가 들어오면 웹과 앱이 각각
+  그것을 설치해야 하므로, 그때는 공유를 포기하거나 별도 패키지로 올린다.
+- 양쪽 모두 **상대 경로**로 가져온다(`frontend`는 `../../shared/x.js`,
+  `mobile`은 `@shared/x.js`). npm 워크스페이스로 묶지 않았다 —
+  기존 세 패키지의 설치 구조를 건드리지 않기 위해서다.
+- `mobile/metro.config.js`의 `watchFolders`가 이 폴더를 가리킨다. 지우면 앱이 `shared/`를
+  못 찾는다.
+- **웹 배포가 이 폴더에 의존한다.** Vercel은 저장소 루트에서 빌드해야 하고
+  (`vercel.json` → `npm run vercel-build`, 출력은 `frontend/dist`), `.vercelignore`에
+  `shared/`를 넣으면 배포가 깨진다.
+
+무엇을 공유하지 **않는가**: 색값(웹은 CSS 변수, 앱은 스타일 객체), 저장소
+(웹은 `localStorage` 동기, 앱은 SecureStore 비동기), 화면 컴포넌트 전부.
 
 ## 다중 사용자
 
@@ -173,6 +200,62 @@ cd frontend && npx vite build --mode development && npx vite preview
 iOS는 **홈 화면에 설치한 PWA에서만** 푸시가 온다(16.4+). 사파리 탭에서는 오지 않으므로,
 설정 화면은 iOS이면서 설치 상태가 아니면 토글 대신 설치 안내를 보여준다.
 
+## 시간에 의존하는 기능 확인하기
+
+복습은 1·3·7·16·30일 뒤에 뜨고, 마감 표시는 날짜가 지나야 바뀐다. 그대로 두면 확인에 한 달이 걸린다.
+
+**시스템 시계를 바꾸지 않는다.** TLS 인증서가 만료로 뜨고 JWT가 깨지며 git 커밋 시각과 빌드 캐시가
+오염된다. 되돌려도 한동안 이상하게 동작한다. 대신 **데이터를 뒤로 민다** — "나중에 떠야 할 것"을
+오늘 마감으로 미리 넣는다.
+
+### 시드 데이터 (손으로 볼 때)
+
+무엇을 넣을지는 `backend/fixtures.js`가 목적별 묶음(`reviewChain` / `deadlines` / `yesterday`)으로
+정하고, `backend/scripts/seed-demo.js`가 그것을 DB에 넣는다. **같은 정의를 `backend/fixtures.test.js`도
+쓴다** — 정의를 두 벌로 만들면 반드시 한쪽만 썩는다. 기능이 늘면 `SCENARIOS`에 묶음을 하나 더한다.
+
+```
+npm --prefix backend run seed                          # 전부
+npm --prefix backend run seed -- --only reviewChain    # 특정 묶음만
+npm --prefix backend run seed -- --clean               # 넣었던 것만 삭제
+```
+
+`테스트데이터.bat`을 더블클릭해도 된다(넣기/지우기 선택). 윈도우 PowerShell의 기본 실행 정책은
+`npm`(실제로는 `npm.ps1`)을 막으므로, `시작하기.bat`과 함께 정책을 건드리지 않고 쓰는 경로다.
+배치 파일 안의 안내문은 cmd 코드페이지 문제를 피해 **영문으로 쓴다**(기존 배치들과 같은 규칙).
+파일 이름은 한글이어도 되지만 **내용에 한글이 하나라도 들어가면 cmd가 파일 전체를 잘못 읽어
+명령이 조각난다** — 실제로 겪은 적이 있다.
+
+### 앱이 안 뜰 때: 남은 프로세스
+
+창을 `[X]`로 닫으면 `node`가 백그라운드에 남아 **3001·5173을 계속 붙잡는다.** 그러면 다음 실행에서
+백엔드가 `EADDRINUSE`로 즉시 죽고, vite는 5173 대신 5174로 밀려나 브라우저에는
+`ERR_CONNECTION_REFUSED`만 보인다. `종료하기.bat`이 그 포트들을 정리한다. 끌 때는 창에서 `Ctrl+C`.
+
+참고로 **vite는 `::1`(IPv6)에만 바인딩한다.** `localhost`로는 열리지만 `127.0.0.1`로는 안 열린다.
+
+시드는 **테스트 전용 계정(`test@test.local`, 없으면 만들고 비밀번호를 출력)에만** 들어간다.
+이 앱은 남의 할 일을 보여주지 않으므로 실제 계정으로 로그인하면 시드는 한 개도 보이지 않는다.
+할 일 이름의 `[시드]` 접두어는 `--clean`이 지울 대상을 특정하는 2차 장치다. 대상 계정에 시드가 아닌
+할 일이 있으면 스크립트는 "실제로 쓰는 계정"으로 보고 중단한다.
+
+시드를 넣으면 복습 1~5단계가 전부 오늘 마감으로 깔리므로, 완료를 눌러 가며 다음 마감이
+**+2 / +4 / +9 / +14일**로 잡히는지(누적값이 아니라 `INTERVALS`의 차분값이다) 한 자리에서 볼 수 있다.
+
+### 알림
+
+`node backend/scripts/send-reminders.js --force`는 빠르지만 **시각 검사를 건너뛴다** — 09시 판정
+로직을 지나지 않는다. 그 경로까지 태우려면 `--reset-push`로 "오늘 이미 보냄" 표시를 지우고
+`REMINDER_TIME`을 지금보다 이른 시각으로 낮춘 뒤 `--force` 없이 실행한다.
+
+### 자동화 테스트
+
+시각을 인자로 받는 함수(`runReminderTick({ now })`, `buildScenarios(today)`)는 그 인자에 고정 날짜를
+꽂는다. 그럴 수 없는 곳은 `vi.useFakeTimers()` + `vi.setSystemTime()`으로 시계를 세운다.
+
+`localDate()`(`backend/lib/dates.js`)는 아직 주입을 받지 않으므로 라우트를 거치는 테스트는 실제 오늘을
+쓴다 — 픽스처에도 `localDate()`를 그대로 넘겨 양쪽의 "오늘"을 맞춘다.
+
 ## TDD는 사용자가 요청할 때만 (Red → Green → Refactor)
 
 **기본값은 TDD가 아니다.** 평소에는 그냥 구현하고, 필요하면 구현 후 테스트를 붙인다.
@@ -233,3 +316,77 @@ TDD 요청을 받았다면 **구현 코드부터 쓰지 않는다.** 아래 순�
 - 화면 구조에 거는 단언은 클래스명이 아니라 역할로 건다 — 섹션 제목은 `getByRole('heading')`,
   ⋯ 메뉴 항목은 `getByRole('menuitem')`. 스타일을 손봤다고 테스트가 깨지면 안 된다.
 - 시간에 의존하는 테스트는 `vi.useFakeTimers()` + `vi.setSystemTime()`으로 고정한다.
+- **경계값은 바깥쪽까지 확인한다.** 마감 임박은 3일 이하이므로 D-3만 보면 조건이 `<= 4`로 넓어져도
+  통과한다. D-4도 함께 본다. 다만 이 둘은 화면 글자가 "마감 D-3" / "마감 D-4"로 똑같고 차이가
+  클래스(`dl-soon` vs `dl-normal`)뿐이라, **여기서만은** 클래스에 단언을 건다(`TodoItem.test.jsx`).
+  구분을 나르는 것이 클래스밖에 없을 때의 예외이고, 구조에 거는 단언은 여전히 역할로 건다.
+- 버그를 고치고 회귀 테스트를 붙였다면 **수정을 잠깐 되돌려 그 테스트가 실제로 실패하는지** 본다.
+  통과만 보고 넘어가면 아무것도 검증하지 않는 테스트가 남는다.
+
+## 앱 (`mobile/`)
+
+Expo SDK 57 + React Native 0.86 + Expo Router. **TypeScript다** — 저장소에서 유일하게.
+실행은 `npm run start:mobile`(= `mobile/`에서 `npx expo start`).
+
+- 화면은 `mobile/src/app/`의 파일 경로가 곧 라우트다. 탭 넷(`(tabs)/index` 오늘 ·
+  `list` 목록 · `review` 복습 · `settings` 설정)과 `login` 하나.
+- **로그인 관문은 `src/app/_layout.tsx`에서 통째로 가른다.** 라우터로 가르지 않는 이유 —
+  로그인하지 않은 사람에게는 탭 자체가 없어야 뒤로가기·딥링크로 새어 들어갈 구멍이 없다.
+- 할 일을 보는 세 탭은 `TodosProvider`가 쥔 목록 하나를 함께 본다. 탭마다 받아오면 같은
+  데이터를 세 번 부르고, 한 탭에서 완료한 것이 다른 탭에 반영되지 않는다.
+- **설정을 메뉴가 아니라 탭으로 둔 것은 의도다.** 심사자가 계정 삭제를 직접 찾아 눌러봐야
+  통과한다 — 접어 두면 "못 찾았다"로 반려된다. 웹처럼 헤더 메뉴에 접지 않는다.
+- 앱 밖으로 나가는 주소는 `Linking`이 아니라 `WebBrowser.openBrowserAsync`로 연다.
+  앱을 떠나지 않고 그 위에 뜬다(Expo 문서가 개인정보처리방침을 이 함수의 예로 든다).
+- 토큰은 **SecureStore**에 둔다(iOS 키체인 / 안드로이드 키스토어). AsyncStorage에 두면
+  기기를 잃었을 때 평문으로 남는다. 웹의 `localStorage`와 달리 전부 async다.
+- 색은 `src/constants/tokens.ts`에서만 나온다. **이 파일은 `frontend/src/App.css`의
+  `:root`를 손으로 옮긴 것이다** — 앱에는 CSS 변수가 없어 화면 조정 패널을 그대로 가져올 수
+  없었다. 한쪽을 고치면 다른 쪽도 고친다. 지금 웹·앱 사이의 유일한 중복이다.
+- 웹의 화면 규칙은 여기서도 그대로다: 이모지 대신 선 아이콘(`@expo/vector-icons`),
+  입력칸 16px 이상, 누르는 것 44px 이상, 드래그로만 되는 기능을 만들지 않는다.
+
+### 아직 없는 것
+
+목록 화면의 추가·수정 폼(웹의 `BottomSheet`에 해당), 오늘 화면의 타임라인 보기
+(계산은 `shared/timeline.js`에 이미 있고 그리는 부분만 없다), 알림, 비밀번호 변경.
+설정 화면에는 아직 계정에 관한 것만 있다.
+
+### 스토어에 올리기 전에 반드시 필요한 것
+
+- **계정 삭제 — 웹·앱 모두 붙었다.** 웹은 계정 메뉴 → 회원 탈퇴, 앱은 설정 탭 → 회원 탈퇴.
+  둘 다 `DELETE /api/auth/me`를 부르고, 성공하면 이 기기의 세션을 지운다.
+- **알림은 웹 푸시로 앱에 가지 않는다.** `backend/lib/webpush.js`의 VAPID는 브라우저 전용이라
+  APNs/FCM을 타야 한다. `reminders.js`의 "하루 1건 요약" 판단은 그대로 두고 발송 어댑터만 는다.
+- 개인정보처리방침 주소는 로그인 화면 아래에 둔다(`src/constants/links.ts`).
+  문서 본문은 `frontend/public/privacy.html` 하나뿐이고 웹·앱이 같은 것을 본다.
+
+### 회원 탈퇴 (`DELETE /api/auth/me`)
+
+비밀번호를 다시 받아 확인하고 **그 자리에서 전부 지운다** — 유예 기간도, 보관용 사본도 없다.
+`PushSubscription` → `Review` → `Todo` → `User` 순서로 지운다. **`User`가 마지막이어야**
+중간에 실패해도 다시 로그인해 재시도할 수 있다(먼저 지우면 주인 없는 문서만 남는다).
+
+- **비밀번호가 틀리면 401이 아니라 403이다.** `shared/authFetch.js`는 401을 세션 만료로 보고
+  무조건 로그아웃시키므로, 401을 주면 오타 한 번에 화면째로 튕겨나간다.
+  (같은 이유의 버그가 `PUT /api/auth/password`에 아직 남아 있다 — 거기는 401을 준다.)
+- 남은 토큰을 따로 무효화하지 않는다. `requireAuth`가 요청마다 사용자를 읽으므로
+  계정 문서가 사라지는 순간 모든 기기의 토큰이 401이 된다.
+- 확인 창은 웹 `DeleteAccountModal.jsx` / 앱 `delete-account-modal.tsx`. 성공 화면이 없다 —
+  성공하면 곧바로 로그아웃해서 트리째 사라지므로 보여줄 다음 화면이 없다.
+  앱에서 `Alert`를 쓰지 않는 이유는 비밀번호를 받아야 하는데 `Alert.prompt`가 iOS 전용이어서다.
+
+### 빌드·제출 (EAS)
+
+`mobile/eas.json`에 프로필 셋(development / preview / production)이 있다.
+**Mac이 없어도 iOS 빌드가 된다** — EAS가 클라우드에서 빌드한다.
+
+```
+eas build --platform ios --profile production --auto-submit
+eas submit --platform android
+```
+
+`submit.production.ios.ascAppId`는 App Store Connect에서 앱을 만든 뒤 채운다.
+서버 주소는 `EXPO_PUBLIC_API_URL`로 **빌드 시점에 박힌다** — 잘못 박으면 앱을 다시
+심사받아야 고쳐지므로, `shared/apiUrl.js`가 운영 빌드에서 값이 없거나 상대 경로면
+빌드를 실패시킨다.
