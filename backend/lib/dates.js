@@ -17,4 +17,14 @@ function addDays(dateStr, days) {
   return toDateStr(d);
 }
 
-module.exports = { toDateStr, localDate, addDays };
+/**
+ * from에서 to까지 며칠인지. to가 과거면 음수다.
+ * (DST 때문에 24시간으로 나누면 어긋나므로 정오 기준으로 재서 반올림한다)
+ */
+function daysDiff(from, to) {
+  const a = new Date(from + 'T12:00:00');
+  const b = new Date(to + 'T12:00:00');
+  return Math.round((b - a) / 86400000);
+}
+
+module.exports = { toDateStr, localDate, addDays, daysDiff };

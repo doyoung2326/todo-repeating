@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addDays, localDate, toDateStr } from './dates.js';
+import { addDays, daysDiff, localDate, toDateStr } from './dates.js';
 
 describe('toDateStr', () => {
   it('한 자리 월/일도 0을 채워 YYYY-MM-DD로 만든다', () => {
@@ -27,6 +27,29 @@ describe('addDays', () => {
   it('복습 주기(1, 3, 7, 16, 30일)를 모두 계산한다', () => {
     expect([1, 3, 7, 16, 30].map(n => addDays('2026-06-01', n)))
       .toEqual(['2026-06-02', '2026-06-04', '2026-06-08', '2026-06-17', '2026-07-01']);
+  });
+});
+
+describe('daysDiff', () => {
+  it('앞으로 남은 날은 양수로 준다', () => {
+    expect(daysDiff('2026-06-01', '2026-06-04')).toBe(3);
+  });
+
+  it('이미 지난 날은 음수로 준다', () => {
+    expect(daysDiff('2026-06-04', '2026-06-01')).toBe(-3);
+  });
+
+  it('같은 날은 0이다', () => {
+    expect(daysDiff('2026-06-01', '2026-06-01')).toBe(0);
+  });
+
+  it('달과 해를 넘어가도 일수로 센다', () => {
+    expect(daysDiff('2026-12-28', '2027-01-04')).toBe(7);
+  });
+
+  it('서머타임이 있는 구간에서도 하루를 잃지 않는다', () => {
+    expect(daysDiff('2026-03-07', '2026-03-09')).toBe(2);
+    expect(daysDiff('2026-10-31', '2026-11-02')).toBe(2);
   });
 });
 

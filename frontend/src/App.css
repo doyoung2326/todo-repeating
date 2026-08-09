@@ -778,6 +778,17 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .form-actions { display: flex; gap: .5rem; }
 .form-actions .btn { flex: 1; }
 
+/* 알림 설정 — 상황 안내 문장과 결과 알림 */
+.notify-desc { font-size: .85rem; line-height: 1.55; color: var(--muted); }
+.notify-notice {
+  padding: .5rem .65rem;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--imp-3-fg);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+
 /* ══════════════════════════════════════════════════
    할 일 목록
 ══════════════════════════════════════════════════ */

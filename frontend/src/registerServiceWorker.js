@@ -14,6 +14,21 @@
 const SW_URL = '/sw.js';
 
 /**
+ * 서비스 워커 등록을 준다. 서비스 워커가 없는 환경이면 null로 resolve하고,
+ * 등록에 실패하면 reject한다 — 부르는 쪽이 상황에 맞게 처리한다.
+ *
+ * 알림 구독(pushManager)이 이 등록을 통해서만 가능하므로 밖으로 낸다.
+ * 같은 URL·scope의 register()는 브라우저가 이미 있는 등록을 그대로 돌려주므로
+ * 여러 번 불러도 안전하다 — 그래서 모듈에 캐시를 두지 않는다.
+ */
+export function getRegistration() {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return Promise.resolve(null);
+  }
+  return navigator.serviceWorker.register(SW_URL, { scope: '/' });
+}
+
+/**
  * 새 버전이 준비되면 onUpdateReady(worker)를 부른다.
  * 정리 함수를 돌려준다.
  */
@@ -25,9 +40,9 @@ export function watchForUpdate(onUpdateReady) {
 
   const announce = (worker) => { if (!cancelled && worker) onUpdateReady(worker); };
 
-  navigator.serviceWorker.register(SW_URL, { scope: '/' })
+  getRegistration()
     .then(registration => {
-      if (cancelled) return;
+      if (cancelled || !registration) return;
 
       // 지난번에 안내를 닫았거나 새로고침하지 않았다면 이미 기다리고 있을 수 있다
       if (registration.waiting && navigator.serviceWorker.controller) {

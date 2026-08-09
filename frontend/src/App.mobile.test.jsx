@@ -129,5 +129,19 @@ describe('좁은 화면 — 계정 메뉴', () => {
 
     expect(screen.getByRole('menuitem', { name: '로그아웃' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '비밀번호 변경' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '알림 설정' })).toBeInTheDocument();
+  });
+
+  it('알림 설정을 고르면 시트가 열린다', async () => {
+    render(<App />);
+    await screen.findByText('수학 문제집');
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '계정 메뉴' }));
+    await user.click(screen.getByRole('menuitem', { name: '알림 설정' }));
+
+    expect(screen.getByRole('dialog', { name: '알림 설정' })).toBeInTheDocument();
+    // jsdom에는 서비스 워커도 Notification도 없다 — 지원하지 않는다고 알려주고 끝나야 한다
+    expect(screen.getByText(/알림을 지원하지 않습니다/)).toBeInTheDocument();
   });
 });

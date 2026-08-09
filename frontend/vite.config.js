@@ -105,6 +105,12 @@ export default defineConfig(({ mode }) => {
         includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'pwa-source.svg'],
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+          // 알림 처리는 워크박스가 만든 워커 위에 얹는다.
+          // strategies를 injectManifest로 바꾸면 precache와 SKIP_WAITING 처리까지 직접 떠안게 되고,
+          // registerServiceWorker.js의 갱신 약속이 깨진다.
+          importScripts: ['/push-sw.js'],
+          // 위에서 직접 불러오므로 프리캐시 목록에 또 넣지 않는다
+          globIgnores: ['push-sw.js'],
           // 제목용 명조는 외부에서 받아오므로 앱 셸 프리캐시에 들어가지 않는다.
           // 한 번 받은 뒤에는 여기에 저장해 둬서 오프라인에서도 고딕으로 떨어지지 않게 한다.
           runtimeCaching: [
