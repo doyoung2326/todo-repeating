@@ -400,6 +400,127 @@ describe('비밀번호를 바꾸면 기존 토큰이 무효가 된다', () => {
   });
 });
 
+describe('회원 탈퇴', () => {
+  const withdraw = (token, password) =>
+    request(app).delete('/api/auth/me').set(asUser(token)).send({ password });
+
+  const subscription = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/device-a',
+    keys: { p256dh: 'p256dh-a', auth: 'auth-a' },
+  };
+
+  /** 지워질 것이 실제로 있는 상태를 만든다 — 할일·복습·알림 구독까지. */
+  async function seedEverything(token, { endpoint = subscription.endpoint } = {}) {
+    const todo = await addTodo(token, '망각곡선 대상', { needs_review: true });
+    await request(app)
+      .put(`/api/todos/${todo.id}/complete`).set(asUser(token)).send({ completed: true });
+    await request(app)
+      .post('/api/push/subscribe').set(asUser(token))
+      .send({ subscription: { ...subscription, endpoint } });
+  }
+
+  it('로그인하지 않으면 탈퇴할 수 없다', async () => {
+    await signUp('a@example.com');
+
+    const res = await request(app).delete('/api/auth/me').send({ password: 'password1' });
+
+    expect(res.status).toBe(401);
+    expect(await User.countDocuments()).toBe(1);
+  });
+
+  it('비밀번호가 틀리면 403이고 아무것도 지워지지 않는다', async () => {
+    const token = await signUp('a@example.com');
+    await seedEverything(token);
+
+    const res = await withdraw(token, 'wrongpassword');
+
+    expect(res.status).toBe(403);
+    expect(await User.countDocuments()).toBe(1);
+    expect(await Todo.countDocuments()).toBe(1);
+    expect(await Review.countDocuments()).toBe(1);
+    expect(await PushSubscription.countDocuments()).toBe(1);
+  });
+
+  // 401을 주면 프론트의 authFetch가 세션 만료로 보고 로그아웃시켜 버린다.
+  it('비밀번호가 틀려도 401은 주지 않는다 (세션 만료로 오해받지 않도록)', async () => {
+    const token = await signUp('a@example.com');
+
+    expect((await withdraw(token, 'wrongpassword')).status).not.toBe(401);
+  });
+
+  it('비밀번호 칸이 아예 없어도 500이 아니라 403을 준다', async () => {
+    const token = await signUp('a@example.com');
+
+    const res = await request(app).delete('/api/auth/me').set(asUser(token)).send({});
+
+    expect(res.status).toBe(403);
+    expect(await User.countDocuments()).toBe(1);
+  });
+
+  it('비밀번호가 맞으면 계정과 그 사용자의 데이터가 전부 사라진다', async () => {
+    const token = await signUp('a@example.com');
+    await seedEverything(token);
+
+    const res = await withdraw(token, 'password1');
+
+    expect(res.status).toBe(200);
+    expect(await User.countDocuments()).toBe(0);
+    expect(await Todo.countDocuments()).toBe(0);
+    expect(await Review.countDocuments()).toBe(0);
+    expect(await PushSubscription.countDocuments()).toBe(0);
+  });
+
+  it('탈퇴해도 다른 사용자의 데이터는 그대로 남는다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    await seedEverything(a);
+    await seedEverything(b, { endpoint: 'https://fcm.googleapis.com/fcm/send/device-b' });
+
+    expect((await withdraw(a, 'password1')).status).toBe(200);
+
+    expect(await User.countDocuments()).toBe(1);
+    expect((await User.findOne()).email).toBe('b@example.com');
+    const bId = String((await User.findOne({ email: 'b@example.com' }))._id);
+    expect((await Todo.find()).map(t => String(t.userId))).toEqual([bId]);
+    expect((await Review.find()).map(r => String(r.userId))).toEqual([bId]);
+    expect((await PushSubscription.find()).map(s => String(s.userId))).toEqual([bId]);
+
+    // 남은 쪽은 아무 일도 없었던 것처럼 계속 쓸 수 있어야 한다
+    const after = await request(app).get('/api/todos').set(asUser(b));
+    expect(after.status).toBe(200);
+    expect(after.body.map(t => t.text)).toEqual(['망각곡선 대상']);
+  });
+
+  it('탈퇴하면 그 계정의 토큰은 더 이상 통하지 않는다', async () => {
+    const token = await signUp('a@example.com');
+    await withdraw(token, 'password1');
+
+    expect((await request(app).get('/api/todos').set(asUser(token))).status).toBe(401);
+    expect((await request(app).get('/api/auth/me').set(asUser(token))).status).toBe(401);
+  });
+
+  it('탈퇴한 뒤에는 같은 이메일로 다시 가입할 수 있다', async () => {
+    const token = await signUp('a@example.com');
+    await seedEverything(token);
+    await withdraw(token, 'password1');
+
+    const fresh = await signUp('a@example.com');
+
+    // 옛 할일이 새 계정에 딸려오지 않는다
+    const res = await request(app).get('/api/todos').set(asUser(fresh));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it('탈퇴하면 옛 비밀번호로 로그인되지 않는다', async () => {
+    const token = await signUp('a@example.com');
+    await withdraw(token, 'password1');
+
+    const res = await request(app).post('/api/auth/login').send({ email: 'a@example.com', password: 'password1' });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('관리자 비밀번호 재설정 스크립트', () => {
   it('해당 계정의 비밀번호를 재설정한다', async () => {
     await signUp('a@example.com');

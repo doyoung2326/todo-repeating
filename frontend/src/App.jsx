@@ -6,14 +6,17 @@ import ReviewSection from './components/ReviewSection';
 import ProgressCheckModal from './components/ProgressCheckModal';
 import AuthScreen from './components/AuthScreen';
 import PasswordChangeModal from './components/PasswordChangeModal';
+import DeleteAccountModal from './components/DeleteAccountModal';
 import NotificationSettings from './components/NotificationSettings';
 import BottomTabBar from './components/BottomTabBar';
 import BottomSheet from './components/BottomSheet';
 import { PlusIcon } from './components/icons';
 import useMediaQuery from './hooks/useMediaQuery';
+import { PRIVACY_URL } from './config/links';
 import { formatKoreanDate } from './theme';
 import { loadSession, saveSession, clearSession } from './auth/session';
-import { createAuthFetch, SessionExpiredError } from './auth/authFetch';
+import { createAuthFetch, SessionExpiredError } from '../../shared/authFetch.js';
+import { localToday, msUntilMidnight } from '../../shared/dates.js';
 import './App.css';
 
 const API = import.meta.env.VITE_API_URL || '/api';
@@ -30,23 +33,22 @@ const ThemePanel = SHOW_THEME_PANEL
 // 좁은 화면 기준. App.css의 첫 번째 브레이크포인트(700px)와 반드시 같아야 한다.
 const COMPACT_QUERY = '(max-width: 699px)';
 
-function localToday() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 export default function App() {
   const [session, setSession]       = useState(loadSession);
+  const [today, setToday]           = useState(localToday);
   const [todos, setTodos]           = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [editingTodo, setEditingTodo] = useState(null);
   const [progressItems, setProgressItems] = useState(null);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [isDraggingOverLeft, setDraggingOverLeft] = useState(false);
   const draggingTodoIdRef = useRef(null);
   const leftDragCount = useRef(0);
+  // 자정 감시가 "날짜가 실제로 바뀌었는지"를 판단할 기준. 상태와 달리 즉시 읽고 쓸 수 있다.
+  const todayRef = useRef(today);
 
   // 좁은 화면에서만 달라지는 것들: 하단 탭, 추가 시트, 계정 메뉴, 항목의 ⋯ 메뉴.
   // 나머지 레이아웃은 전부 CSS가 처리한다.
@@ -113,6 +115,44 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account]);
 
+  // 자정을 넘기면 "오늘"이 바뀐다. 갱신하는 장치가 없으면 화면은 어제에 머물러 있다가
+  // 엉뚱한 리렌더가 일어나는 순간 갑자기 하루를 건너뛴다.
+  //
+  // 타이머 하나만으로는 부족하다 — 절전에 들어간 사이 setTimeout은 밀리거나 늦게 깬다.
+  // 그래서 자정 타이머와 "화면이 다시 보일 때"를 함께 건다.
+  useEffect(() => {
+    let timer;
+
+    const sync = () => {
+      const now = localToday();
+      if (now !== todayRef.current) {
+        todayRef.current = now;
+        setToday(now);
+        // 날짜가 바뀌면 오늘 할 일·복습의 대상이 달라지므로 목록도 다시 받는다.
+        // 진행률 모달은 일부러 띄우지 않는다 — 쓰고 있는 중에 튀어나오면 방해가 된다.
+        if (account) fetchTodos();
+      }
+      schedule();
+    };
+
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(sync, msUntilMidnight());
+    };
+
+    const syncIfVisible = () => { if (document.visibilityState === 'visible') sync(); };
+
+    schedule();
+    document.addEventListener('visibilitychange', syncIfVisible);
+    window.addEventListener('focus', sync);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', syncIfVisible);
+      window.removeEventListener('focus', sync);
+    };
+  }, [account, fetchTodos]);
+
   async function apiCall(url, options = {}) {
     const res = await authFetch(url, options);
     if (!res.ok) {
@@ -132,6 +172,16 @@ export default function App() {
     const next = { ...session, token: fresh };
     saveSession(next);
     setSession(next);
+  };
+
+  // 서버가 계정과 데이터를 지우고 나면 남은 토큰은 이미 죽어 있다. 여기서는 이 기기의
+  // 흔적만 지우면 된다 — 오류는 잡지 않고 모달이 보여주도록 그대로 던진다.
+  const deleteAccount = async (password) => {
+    await apiCall(`${API}/auth/me`, {
+      method: 'DELETE',
+      body: JSON.stringify({ password }),
+    });
+    logout();
   };
 
   // 세션이 만료돼 로그인 화면으로 넘어간 경우에는 알림을 띄우지 않는다.
@@ -201,9 +251,12 @@ export default function App() {
     setSheetOpen(true);
   };
 
-  const today           = localToday();
+  // 완료를 둘로 가른다. activeReview는 서버가 "복습 대상이고 완료된" 항목에만 채우므로,
+  // 완료했는데 activeReview가 없다 = 복습을 다 끝냈거나 애초에 복습을 안 쓰는 항목이다.
+  // (미완료도 activeReview가 없으니 completed 조건을 빼면 안 된다.)
   const incompleteTodos = todos.filter(t => !t.completed);
-  const completedTodos  = todos.filter(t =>  t.completed);
+  const completedTodos  = todos.filter(t =>  t.completed &&  t.activeReview);
+  const archivedTodos   = todos.filter(t =>  t.completed && !t.activeReview);
 
   // 오늘 할 일: (a) 수행날짜=오늘인 미완료 + (b) 오늘 복습일인 완료 항목
   const todayPerformTodos = incompleteTodos.filter(t => t.perform_date === today);
@@ -250,6 +303,13 @@ export default function App() {
         />
       )}
 
+      {deletingAccount && (
+        <DeleteAccountModal
+          onSubmit={deleteAccount}
+          onClose={() => setDeletingAccount(false)}
+        />
+      )}
+
       <header className="app-header">
         <div className="app-brand">
           <span className="app-date">{formatKoreanDate(today)}</span>
@@ -288,6 +348,14 @@ export default function App() {
                       onClick={() => { setAccountMenuOpen(false); logout(); }}>
                       로그아웃
                     </button>
+                    <a role="menuitem" href={PRIVACY_URL} target="_blank" rel="noopener noreferrer"
+                      onClick={() => setAccountMenuOpen(false)}>
+                      개인정보처리방침
+                    </a>
+                    <button type="button" role="menuitem" className="danger"
+                      onClick={() => { setAccountMenuOpen(false); setDeletingAccount(true); }}>
+                      회원 탈퇴
+                    </button>
                   </div>
                 </>
               )}
@@ -298,6 +366,7 @@ export default function App() {
               <button className="app-header-btn" type="button" onClick={() => setNotifyOpen(true)}>알림 설정</button>
               <button className="app-header-btn" type="button" onClick={() => setChangingPassword(true)}>비밀번호 변경</button>
               <button className="app-header-btn" type="button" onClick={logout}>로그아웃</button>
+              <button className="app-header-btn danger" type="button" onClick={() => setDeletingAccount(true)}>회원 탈퇴</button>
             </>
           )}
         </div>
@@ -339,6 +408,7 @@ export default function App() {
           <TodoList
             incompleteTodos={incompleteTodos}
             completedTodos={completedTodos}
+            archivedTodos={archivedTodos}
             today={today}
             compact={isCompact}
             onComplete={completeTodo}

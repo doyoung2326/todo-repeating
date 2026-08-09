@@ -132,6 +132,30 @@ describe('좁은 화면 — 계정 메뉴', () => {
     expect(screen.getByRole('menuitem', { name: '알림 설정' })).toBeInTheDocument();
   });
 
+  // 앱스토어가 요구하는 경로다. 좁은 화면에서는 이 메뉴가 유일한 입구라 사라지면 안 된다.
+  it('회원 탈퇴와 개인정보처리방침도 계정 메뉴 안에 있다', async () => {
+    render(<App />);
+    await screen.findByText('수학 문제집');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '계정 메뉴' }));
+
+    expect(screen.getByRole('menuitem', { name: '회원 탈퇴' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '개인정보처리방침' }))
+      .toHaveAttribute('href', '/privacy.html');
+  });
+
+  it('회원 탈퇴를 고르면 확인 모달이 열린다', async () => {
+    render(<App />);
+    await screen.findByText('수학 문제집');
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '계정 메뉴' }));
+    await user.click(screen.getByRole('menuitem', { name: '회원 탈퇴' }));
+
+    expect(screen.getByRole('heading', { name: '회원 탈퇴' })).toBeInTheDocument();
+    expect(screen.getByLabelText('비밀번호 확인')).toBeInTheDocument();
+  });
+
   it('알림 설정을 고르면 시트가 열린다', async () => {
     render(<App />);
     await screen.findByText('수학 문제집');

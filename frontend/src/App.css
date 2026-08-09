@@ -33,6 +33,37 @@
   --imp-2-bg:    #e7ece7;  --imp-2-fg: #5f7566;
   --imp-3-bg:    #dbe6dd;  --imp-3-fg: #3a5442;
 
+  /* 할 일 성격 — 사용자가 고르는 8칸.
+     문서에는 칸 번호(1~8)만 저장하고 실제 색은 여기서만 정한다.
+     채도는 --danger·--warn과 같은 대역(8~26%)으로 눌러 둔다 — 여기만 쨍하면
+     "강조는 한 색뿐"이라는 화면 전체의 약속이 무너진다.
+     한 줄에 토큰 하나씩 적는다. themeWriter는 줄머리 토큰만 고쳐 쓰므로
+     위의 --imp-N-fg처럼 줄 뒤쪽에 붙이면 화면 조정 패널이 조용히 못 만진다. */
+  --cat-1:       #657051;
+  --cat-1-bg:    #e7ebe0;
+  --cat-1-fg:    #4c5738;
+  --cat-2:       #456668;
+  --cat-2-bg:    #e0eaeb;
+  --cat-2-fg:    #325052;
+  --cat-3:       #516885;
+  --cat-3-bg:    #e3e7ee;
+  --cat-3-fg:    #35455a;
+  --cat-4:       #746487;
+  --cat-4-bg:    #e8e3ed;
+  --cat-4-fg:    #4c3f5a;
+  --cat-5:       #856073;
+  --cat-5-bg:    #ede3e8;
+  --cat-5-fg:    #573d4a;
+  --cat-6:       #915b55;
+  --cat-6-bg:    #eee3e2;
+  --cat-6-fg:    #5d3b37;
+  --cat-7:       #816b4b;
+  --cat-7-bg:    #ede7de;
+  --cat-7-fg:    #584932;
+  --cat-8:       #746b63;
+  --cat-8-bg:    #e9e5e2;
+  --cat-8-fg:    #514943;
+
   /* 진행률 — 낮을수록 주의색 */
   --prog-low:    #96574a;
   --prog-mid:    #91753c;
@@ -220,15 +251,27 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   margin-bottom: .2rem;
 }
 
-.app-menu button {
+/* 방침 링크만 진짜 <a>다(새 탭으로 열려야 하고 주소를 복사할 수 있어야 한다).
+   나머지 항목과 같은 모양이 되도록 선택자에 함께 넣는다. */
+.app-menu button,
+.app-menu a {
+  display: flex;
+  align-items: center;
   text-align: left;
   padding: .6rem;
   min-height: var(--tap);
   font-size: .88rem;
   font-weight: 600;
   border-radius: 7px;
+  color: inherit;
+  text-decoration: none;
 }
-.app-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.app-menu button:hover,
+.app-menu a:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* 되돌릴 수 없는 항목은 평소에도 색으로 구분해 둔다 — 눌러 보고 알게 되면 늦다 */
+.app-menu button.danger { color: var(--danger); }
+.app-menu button.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
 /* ── 에러 배너 ───────────────────────────────────── */
 .error-banner {
@@ -301,6 +344,20 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 }
 .section-title.muted { color: var(--muted); }
 
+/* 접히는 제목. 생김새는 .section-title 그대로 두고 버튼의 기본 껍데기만 벗긴다. */
+.archive-toggle {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+/* 방향은 상태를 나르는 aria-expanded가 정한다. 클래스를 하나 더 두지 않는다. */
+.archive-toggle svg { transition: transform .15s ease; }
+.archive-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+
 .count-badge,
 .count-sm {
   font-family: var(--font-body);
@@ -363,6 +420,7 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .time-tag,
 .review-pending-tag,
 .imp-tag,
+.cat-tag,
 .review-tag {
   font-size: var(--fs-chip);
   font-weight: 600;
@@ -435,6 +493,9 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
 .btn-ghost:hover { background: var(--imp-1-bg); color: var(--text); }
+/* 되돌릴 수 없는 확인 버튼(회원 탈퇴). 강조색과 헷갈리지 않게 의미색을 쓴다. */
+.btn-danger { background: var(--danger); color: var(--on-accent); }
+.btn-danger:hover { filter: brightness(.92); }
 
 /* 아이콘 버튼 — 모바일에서는 손가락 크기 */
 .icon-btn,
@@ -773,6 +834,22 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .imp-btn.imp-2.active { background: var(--imp-2-bg); color: var(--imp-2-fg); border-color: var(--imp-2); }
 .imp-btn.imp-3.active { background: var(--imp-3-bg); color: var(--imp-3-fg); border-color: var(--imp-3); }
 
+/* 성격 색 고르기 — 채움색은 인라인으로 var(--cat-N)이 들어온다(CategoryManager).
+   슬롯별 클래스를 만들지 않아서 칸 개수의 정의처가 theme.js 하나로 남는다. */
+.cat-swatches { display: flex; flex-wrap: wrap; gap: .3rem; }
+.cat-swatch {
+  /* 보이는 크기 = 누르는 크기. 작은 점을 큰 칸 안에 넣지 않는다 */
+  width: var(--tap); height: var(--tap);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  cursor: pointer;
+  transition: box-shadow .15s;
+}
+/* 고른 것을 색이 아니라 고리로 표시한다 — 색만으로 구분되면 못 알아보는 사람이 있다.
+   (안쪽 고리는 카드색이라 칸 색과 바깥 고리 사이를 띄우는 역할) */
+.cat-swatch.active { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
+
 /* 복습 토글 */
 .review-toggle {
   display: flex;
@@ -809,6 +886,17 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   background: var(--accent-soft);
   border-radius: var(--radius-sm);
 }
+
+/* 성격 관리 — 목록 한 줄에 미리보기 칩과 ⋯ 메뉴 */
+.cat-list { display: flex; flex-direction: column; }
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: var(--tap);
+}
+.cat-row + .cat-row { border-top: 1px solid var(--line-soft); }
+.cat-row .more-wrap { margin-left: auto; }
 
 /* ══════════════════════════════════════════════════
    할 일 목록
@@ -851,6 +939,10 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .todo-text.struck { text-decoration: line-through; text-decoration-thickness: 1px; color: var(--muted); }
 
 .imp-tag { font-weight: 700; }
+
+/* 성격 칩 — 색은 인라인으로 var(--cat-N-bg/-fg)가 들어온다(TodoItem).
+   말줄임을 두지 않는 이유: 서버가 이름을 12자로 막고 .todo-top이 이미 줄바꿈된다. */
+.cat-tag { font-weight: 650; }
 
 .todo-meta { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
 
@@ -1335,6 +1427,15 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 }
 .auth-switch:hover { text-decoration: underline; }
 
+/* 로그인 화면 맨 아래 — 안내용이므로 회원가입 링크보다 한 단계 물러나 있다 */
+.auth-foot {
+  margin-top: .2rem;
+  text-align: center;
+  font-size: .78rem;
+}
+.auth-foot a { color: var(--muted); text-decoration: none; }
+.auth-foot a:hover { color: var(--accent); text-decoration: underline; }
+
 /* ══════════════════════════════════════════════════
    ≥ 700px — 2열. 하단 탭바가 사라지고 전부 한눈에 보인다.
 ══════════════════════════════════════════════════ */
@@ -1403,6 +1504,8 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
     transition: background .15s, color .15s;
   }
   .app-header-btn:hover { background: var(--accent-soft); color: var(--accent); }
+  .app-header-btn.danger { color: var(--danger); border-color: var(--danger-soft); }
+  .app-header-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
   /* 마우스 크기에 맞춰 되돌리기 */
   .icon-btn, .icon-btn-xs, .more-btn { width: 32px; height: 32px; font-size: .9rem; }

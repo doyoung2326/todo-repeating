@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { normalizeSession } from '../auth/session';
+import { PRIVACY_URL } from '../config/links';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -96,6 +97,11 @@ export default function AuthScreen({ api, onAuth }) {
         <button className="auth-switch" type="button" onClick={switchMode}>
           {isRegister ? '이미 계정이 있어요 · 로그인' : '처음이신가요? · 회원가입'}
         </button>
+
+        {/* 로그인하기 전에도 닿아야 하는 문서다. 스토어 심사도 이 자리를 본다. */}
+        <p className="auth-foot">
+          <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">개인정보처리방침</a>
+        </p>
       </form>
     </div>
   );
