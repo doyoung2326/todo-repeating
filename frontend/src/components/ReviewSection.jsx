@@ -1,12 +1,8 @@
 import { STAGE_LABELS, IMP_COLORS } from '../theme';
+import { daysDiff } from '../../../shared/dates.js';
 
 const STAGE_COUNT = STAGE_LABELS.length;
 
-function daysDiff(dateStr, today) {
-  const a = new Date(dateStr + 'T00:00:00');
-  const b = new Date(today + 'T00:00:00');
-  return Math.round((a - b) / 86400000);
-}
 
 /**
  * 1·3·7·16·30일 중 몇 번째까지 왔는지 보여주는 다섯 칸.

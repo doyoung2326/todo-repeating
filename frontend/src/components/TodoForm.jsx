@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const IMP_LABELS = { 1: '낮음', 2: '중간', 3: '높음' };
+import { IMP_LABELS } from '../theme';
 
 export default function TodoForm({ onSubmit, initialValues, onCancel }) {
   const [text,        setText]       = useState('');
