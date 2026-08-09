@@ -28,12 +28,42 @@
   기존 세 패키지의 설치 구조를 건드리지 않기 위해서다.
 - `mobile/metro.config.js`의 `watchFolders`가 이 폴더를 가리킨다. 지우면 앱이 `shared/`를
   못 찾는다.
-- **웹 배포가 이 폴더에 의존한다.** Vercel은 저장소 루트에서 빌드해야 하고
-  (`vercel.json` → `npm run vercel-build`, 출력은 `frontend/dist`), `.vercelignore`에
-  `shared/`를 넣으면 배포가 깨진다.
+- **웹 배포가 이 폴더에 의존한다.** 아래 "웹 배포(Vercel)" 절을 반드시 읽는다 —
+  `.vercelignore`에 `shared/`를 넣으면 배포가 깨진다.
 
 무엇을 공유하지 **않는가**: 색값(웹은 CSS 변수, 앱은 스타일 객체), 저장소
 (웹은 `localStorage` 동기, 앱은 SecureStore 비동기), 화면 컴포넌트 전부.
+
+## 배포 — 세 곳이 따로 나간다
+
+| 대상 | 어디로 | 무엇이 트리거하나 |
+| --- | --- | --- |
+| 웹(PWA) | Vercel | `main` 푸시 (그 외 브랜치는 프리뷰) |
+| 서버 | Railway (`railway.toml` → `node backend/server.js`) | 푸시 |
+| 앱(iOS·안드로이드) | EAS Build → 스토어 심사 | **사람이 `eas build`를 부를 때만** |
+
+**앱은 푸시로 나가지 않는다.** 웹·서버는 즉시 바뀌는데 앱은 심사를 거쳐 며칠 뒤에,
+그마저도 사용자가 갱신해야 바뀐다. 그래서 **서버는 이미 나가 있는 앱 버전과 계속 호환돼야
+한다** — 라우트를 지우거나 응답 모양을 바꾸면 구버전 앱이 조용히 깨진다. 필드는 더하고,
+빼야 할 때는 앱 강제 업데이트 장치를 먼저 만든다.
+
+### 웹 배포(Vercel) — Root Directory는 **저장소 루트**다
+
+대시보드의 Root Directory를 `frontend`로 두면 안 된다. `frontend`가 빌드 시점에
+**그 바깥의 `shared/`를 읽기 때문**이다(`../../shared/*.js`). 루트에서 빌드해야 닿는다.
+
+- `vercel.json` → `buildCommand: npm run vercel-build`, `outputDirectory: frontend/dist`.
+  이 두 값은 **Root Directory가 루트일 때만 맞다.** 빌드가 `Missing script: "vercel-build"`로
+  죽으면 대시보드 설정이 `frontend`로 돌아가 있는 것이다 —
+  `vercel.json`을 고치지 말고 **대시보드를 고친다.**
+- `.vercelignore`가 `mobile/`·`backend/`를 뺀다. 웹 배포에 필요한 것은 `frontend/`와
+  그것이 읽는 `shared/`뿐이다. **`shared/`를 여기 넣으면 배포가 깨진다.**
+- **`VITE_API_URL`은 Preview 환경에도 등록해야 한다.** `vite build`는 Vercel 환경과 무관하게
+  항상 production 모드라, `shared/apiUrl.js`의 가드가 프리뷰 빌드도 똑같이 막는다.
+  Production에만 등록해 두면 PR 프리뷰가 전부 실패한다.
+
+> 이 설정으로 여러 번 헤맨 기록이 `vercel.json` 히스토리에 남아 있다
+> (`init` → `8e79e9f` → `b78e63f`). 실패하면 위 세 줄부터 확인한다.
 
 ## 다중 사용자
 
