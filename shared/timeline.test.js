@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layoutTimed, buildTimeAxis } from './TodaySection';
+import { layoutTimed, buildTimeAxis } from './timeline.js';
 
 /** 타임라인 배치 계산. 시간이 겹치는 항목을 나란한 칸으로 나누는 부분이다. */
 

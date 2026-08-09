@@ -36,6 +36,13 @@ export const PlusIcon = () => (
   </svg>
 );
 
+/** 접힌 곳을 여는 표시. 방향은 CSS가 돌린다 — 상태를 두 벌로 나르지 않는다. */
+export const ChevronIcon = () => (
+  <svg {...base} width="1em" height="1em">
+    <path d="M8 10l4 4 4-4" />
+  </svg>
+);
+
 export const TrashIcon = () => (
   <svg {...base}>
     <path d="M4 7h16M10 4h4M6 7l1 13h10l1-13" />

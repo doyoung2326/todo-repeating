@@ -243,6 +243,33 @@ app.put('/api/auth/password', requireAuth, wrap(async (req, res) => {
   res.json({ token: issueToken(user) });
 }));
 
+// ── DELETE 회원 탈퇴 ───────────────────────────────
+// 앱스토어(App Store 5.1.1(v) / Google Play)는 계정을 만들 수 있는 앱에 앱 안에서의
+// 삭제 경로를 요구한다. 유예 기간을 두지 않고 그 자리에서 전부 지운다.
+// 웹과 앱이 같은 라우트를 쓴다.
+app.delete('/api/auth/me', requireAuth, wrap(async (req, res) => {
+  const user = req.user;
+
+  const given = typeof req.body?.password === 'string' ? req.body.password : '';
+  // 여기만 401이 아니라 403이다. 프론트의 authFetch는 401을 "세션 만료"로 보고 무조건
+  // 로그아웃시키므로, 비밀번호를 한 번 잘못 치면 모달째로 튕겨나간다.
+  if (!await bcrypt.compare(given, user.password_hash)) {
+    return res.status(403).json({ error: '비밀번호가 올바르지 않습니다.' });
+  }
+
+  // 트랜잭션을 걸지 않는 대신 순서로 지킨다 — User를 마지막에 지워야, 중간에 실패해도
+  // 다시 로그인해서 탈퇴를 재시도할 수 있다. 먼저 지우면 주인 없는 문서만 남는다.
+  const userId = user._id;
+  await PushSubscription.deleteMany({ userId });
+  await Review.deleteMany({ userId });
+  await Todo.deleteMany({ userId });
+  await User.deleteOne({ _id: userId });
+
+  // 남아 있는 토큰은 따로 무효로 만들지 않아도 된다 — requireAuth가 요청마다 사용자를
+  // 실제로 읽으므로, 계정 문서가 사라지는 순간 모든 기기의 토큰이 401이 된다.
+  res.json({ ok: true });
+}));
+
 // 여기부터 아래 모든 라우트는 로그인이 필요하다.
 app.use('/api/todos', requireAuth);
 app.use('/api/reviews', requireAuth);

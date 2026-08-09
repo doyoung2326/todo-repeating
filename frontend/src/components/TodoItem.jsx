@@ -1,10 +1,8 @@
 import { STAGE_LABELS, IMP_LABELS, progressColor } from '../theme';
+import { daysDiff } from '../../../shared/dates.js';
 import MoreMenu from './MoreMenu';
 import { PinIcon, EditIcon, TrashIcon } from './icons';
 
-function daysDiff(dateStr, today) {
-  return Math.round((new Date(dateStr + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
-}
 
 function ReviewBadge({ review, today, onCompleteReview }) {
   const diff  = daysDiff(review.due_date, today);

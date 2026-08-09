@@ -1,0 +1,4 @@
+# 웹 배포에 필요한 것은 frontend/ 와 그것이 import 하는 shared/ 뿐이다.
+# (shared/를 여기 넣으면 배포가 깨진다 — frontend가 빌드 시점에 읽는다.)
+mobile/
+backend/

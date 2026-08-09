@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "scripts": {
     "start": "concurrently -n 서버,화면 -c cyan,magenta \"node backend/server.js\" \"cd frontend && npm run dev\"",
-    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "install:all": "cd shared && npm install && cd ../backend && npm install && cd ../frontend && npm install",
     "start:backend": "node backend/server.js",
     "start:frontend": "cd frontend && npm run dev",
-    "vercel-build": "cd frontend && npm install && npm run build",
-    "test": "npm test --prefix backend && npm test --prefix frontend"
+    "start:mobile": "npm start --prefix mobile",
+    "vercel-build": "npm --prefix frontend install && npm --prefix frontend run build",
+    "test": "npm test --prefix shared && npm test --prefix backend && npm test --prefix frontend"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

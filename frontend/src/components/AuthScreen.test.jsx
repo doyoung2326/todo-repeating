@@ -47,6 +47,25 @@ async function submitWith(user, { email = 'a@example.com', password = 'password1
   await user.click(submitBtn());
 }
 
+describe('AuthScreen — 개인정보처리방침', () => {
+  // 스토어 심사와 AdSense가 확인하는 자리다. 로그인 전에도 닿을 수 있어야 한다.
+  it('로그인하지 않아도 방침 링크가 보인다', () => {
+    setup();
+
+    const link = screen.getByRole('link', { name: '개인정보처리방침' });
+    expect(link).toHaveAttribute('href', '/privacy.html');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('회원가입 모드에서도 그대로 있다', async () => {
+    const { user } = setup();
+
+    await user.click(switchBtn());
+
+    expect(screen.getByRole('link', { name: '개인정보처리방침' })).toBeInTheDocument();
+  });
+});
+
 describe('AuthScreen — 모드 전환', () => {
   it('처음에는 로그인 모드로 열린다', () => {
     setup();

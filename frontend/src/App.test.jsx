@@ -65,6 +65,41 @@ describe('App — 로그인하지 않은 상태', () => {
   });
 });
 
+describe('App — 자정을 넘길 때', () => {
+  // 실제로 자정을 기다릴 수는 없으니 시계를 자정 직전에 세워두고 넘긴다.
+  afterEach(() => vi.useRealTimers());
+
+  it('앱을 켜둔 채 자정을 넘기면 헤더의 날짜가 다음 날로 바뀐다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 7, 9, 23, 59, 50));   // 8월 9일 23:59:50
+    saveSession(SESSION);
+    mockApi({ 'GET /todos': () => res(200, [TODO]) });
+
+    render(<App />);
+    expect(await screen.findByText('8월 9일 일요일')).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(15_000);            // 자정 통과
+
+    expect(await screen.findByText('8월 10일 월요일')).toBeInTheDocument();
+  });
+
+  it('절전에서 깨어난 것처럼 창이 다시 보이면 날짜를 다시 맞춘다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 7, 9, 23, 59, 50));
+    saveSession(SESSION);
+    mockApi({ 'GET /todos': () => res(200, [TODO]) });
+
+    render(<App />);
+    await screen.findByText('8월 9일 일요일');
+
+    // 타이머가 밀린 상황: 시계만 앞으로 가고 setTimeout은 발화하지 않았다
+    vi.setSystemTime(new Date(2026, 7, 10, 7, 0, 0));
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(await screen.findByText('8월 10일 월요일')).toBeInTheDocument();
+  });
+});
+
 describe('App — 넓은 화면에서도 할 일 추가는 + 버튼으로', () => {
   it('추가 폼이 목록 위 자리를 상시 차지하지 않는다', async () => {
     saveSession(SESSION);
@@ -232,6 +267,60 @@ describe('App — 로그인한 상태', () => {
     // 바뀐 토큰이 이후 요청에 실려야 한다
     const changeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/password'));
     expect(changeCall[1].headers.Authorization).toBe(`Bearer ${SESSION.token}`);
+  });
+
+  it('넓은 화면에서도 회원 탈퇴 버튼이 헤더에 있다', async () => {
+    saveSession(SESSION);
+    mockApi({ 'GET /todos': () => res(200, []) });
+    render(<App />);
+    await screen.findByText('a@example.com');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '회원 탈퇴' }));
+
+    expect(await screen.findByLabelText('비밀번호 확인')).toBeInTheDocument();
+  });
+
+  it('탈퇴하면 세션을 지우고 로그인 화면으로 돌아간다', async () => {
+    saveSession(SESSION);
+    const fetchMock = mockApi({
+      'GET /todos':            () => res(200, [TODO]),
+      'DELETE /auth/me':  () => res(200, { ok: true }),
+    });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '회원 탈퇴' }));
+    await user.type(await screen.findByLabelText('비밀번호 확인'), 'password1');
+    await user.click(screen.getByRole('button', { name: '탈퇴하기' }));
+
+    expect(await loginScreen()).toBeInTheDocument();
+    expect(loadSession()).toBe(null);
+
+    const call = fetchMock.mock.calls.find(([url, o]) => o?.method === 'DELETE' && String(url).endsWith('/auth/me'));
+    expect(JSON.parse(call[1].body)).toEqual({ password: 'password1' });
+    expect(call[1].headers.Authorization).toBe(`Bearer ${SESSION.token}`);
+  });
+
+  // 서버가 403을 주는 이유가 여기 있다 — 401이면 authFetch가 세션 만료로 보고 로그아웃시킨다.
+  it('비밀번호를 틀리면 로그아웃되지 않고 모달에 오류만 남는다', async () => {
+    saveSession(SESSION);
+    mockApi({
+      'GET /todos':           () => res(200, [TODO]),
+      'DELETE /auth/me': () => res(403, { error: '비밀번호가 올바르지 않습니다.' }),
+    });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '회원 탈퇴' }));
+    await user.type(await screen.findByLabelText('비밀번호 확인'), 'wrongpassword');
+    await user.click(screen.getByRole('button', { name: '탈퇴하기' }));
+
+    expect(await screen.findByText(/비밀번호가 올바르지 않습니다/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '로그인' })).not.toBeInTheDocument();
+    expect(loadSession()?.token).toBe(SESSION.token);
+    expect(alertMock).not.toHaveBeenCalled();
   });
 
   it('로그아웃 뒤 다른 계정으로 로그인하면 그 계정의 목록을 새로 받아온다', async () => {
