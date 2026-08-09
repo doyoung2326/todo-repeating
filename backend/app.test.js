@@ -1,13 +1,16 @@
 // 사용자 격리 통합 테스트. 인메모리 MongoDB에 붙여서 실제 라우트를 그대로 호출한다.
 // (JWT_SECRET은 app.js를 import하기 전에 넣어야 한다)
 process.env.JWT_SECRET = 'test-secret';
+// 실제로 발송하지는 않는다 — 라우트가 "키가 있다"고 판단하게만 하면 된다.
+process.env.VAPID_PUBLIC_KEY = 'test-public-key';
+process.env.VAPID_PRIVATE_KEY = 'test-private-key';
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { app, User, Todo, Review } from './app.js';
+import { app, User, Todo, Review, PushSubscription } from './app.js';
 import { resetPassword } from './scripts/reset-password.js';
 
 let mongod;
@@ -23,7 +26,9 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await Promise.all([User.deleteMany({}), Todo.deleteMany({}), Review.deleteMany({})]);
+  await Promise.all([
+    User.deleteMany({}), Todo.deleteMany({}), Review.deleteMany({}), PushSubscription.deleteMany({}),
+  ]);
 });
 
 /** 회원가입하고 그 사용자의 토큰을 준다. */
@@ -452,6 +457,111 @@ describe('관리자 비밀번호 재설정 스크립트', () => {
     const res = await request(app)
       .post('/api/auth/login').send({ email: 'a@example.com', password: 'password1' });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('알림 구독', () => {
+  const subscription = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/device-a',
+    keys: { p256dh: 'p256dh-a', auth: 'auth-a' },
+  };
+
+  const subscribe = (token, sub = subscription) =>
+    request(app).post('/api/push/subscribe').set(asUser(token)).send({ subscription: sub });
+
+  it('로그인하지 않으면 구독할 수 없다', async () => {
+    const res = await request(app).post('/api/push/subscribe').send({ subscription });
+    expect(res.status).toBe(401);
+    expect(await PushSubscription.countDocuments()).toBe(0);
+  });
+
+  it('공개키를 알려준다', async () => {
+    const a = await signUp('a@example.com');
+    const res = await request(app).get('/api/push/public-key').set(asUser(a));
+
+    expect(res.status).toBe(200);
+    expect(res.body.publicKey).toBe('test-public-key');
+  });
+
+  it('서버에 알림 키가 없으면 503으로 거절한다', async () => {
+    const a = await signUp('a@example.com');
+    const saved = process.env.VAPID_PUBLIC_KEY;
+    delete process.env.VAPID_PUBLIC_KEY;
+    try {
+      expect((await request(app).get('/api/push/public-key').set(asUser(a))).status).toBe(503);
+      expect((await subscribe(a)).status).toBe(503);
+    } finally {
+      process.env.VAPID_PUBLIC_KEY = saved;
+    }
+  });
+
+  it('구독하면 그 사용자의 것으로 저장된다', async () => {
+    const a = await signUp('a@example.com');
+    const res = await subscribe(a);
+
+    expect(res.status).toBe(200);
+    const saved = await PushSubscription.findOne({ endpoint: subscription.endpoint });
+    expect(saved.keys.auth).toBe('auth-a');
+    expect(saved.last_sent_date).toBeNull();
+    expect(String(saved.userId)).toBe(String((await User.findOne({ email: 'a@example.com' }))._id));
+  });
+
+  it('같은 기기에서 다시 구독해도 행이 늘어나지 않는다', async () => {
+    const a = await signUp('a@example.com');
+    await subscribe(a);
+    await subscribe(a);
+
+    expect(await PushSubscription.countDocuments()).toBe(1);
+  });
+
+  it('다른 계정으로 다시 구독하면 그 기기의 주인이 바뀐다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    await subscribe(a);
+    await subscribe(b);
+
+    const saved = await PushSubscription.findOne({ endpoint: subscription.endpoint });
+    expect(await PushSubscription.countDocuments()).toBe(1);
+    expect(String(saved.userId)).toBe(String((await User.findOne({ email: 'b@example.com' }))._id));
+  });
+
+  it('모양이 잘못된 구독은 저장하지 않는다', async () => {
+    const a = await signUp('a@example.com');
+    const res = await subscribe(a, { endpoint: 'http://insecure.example.com', keys: { p256dh: 'x', auth: 'y' } });
+
+    expect(res.status).toBe(400);
+    expect(await PushSubscription.countDocuments()).toBe(0);
+  });
+
+  it('남의 구독은 해제할 수 없다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    await subscribe(a);
+
+    const res = await request(app)
+      .delete('/api/push/subscribe').set(asUser(b)).send({ endpoint: subscription.endpoint });
+
+    expect(res.status).toBe(404);
+    expect(await PushSubscription.countDocuments()).toBe(1);
+  });
+
+  it('자기 구독은 해제할 수 있다', async () => {
+    const a = await signUp('a@example.com');
+    await subscribe(a);
+
+    const res = await request(app)
+      .delete('/api/push/subscribe').set(asUser(a)).send({ endpoint: subscription.endpoint });
+
+    expect(res.status).toBe(200);
+    expect(await PushSubscription.countDocuments()).toBe(0);
+  });
+
+  it('구독하지 않은 사용자에게는 테스트 알림을 보내지 않는다', async () => {
+    const a = await signUp('a@example.com');
+    const res = await request(app).post('/api/push/test').set(asUser(a));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/알림을 먼저 켜/);
   });
 });
 

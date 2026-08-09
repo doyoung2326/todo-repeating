@@ -108,6 +108,71 @@ JS가 인라인 스타일로 색을 넣어야 하면 `src/theme.js`가 주는 `v
 - 모바일 입력칸은 **16px 미만으로 두지 않는다.** iOS가 누를 때 화면을 확대한다.
 - 누르는 것은 `--tap`(모바일 44px) 이상으로 둔다.
 
+## 알림 (웹 푸시)
+
+매일 정해진 시각에 **그날 복습할 항목을 요약해 1건** 보낸다. 앱이 닫혀 있어도 오도록 서버가 밀어준다
+(Web Push + VAPID). 건별 알림이 아니라 하루 1건이다 — 복습이 5개면 알림도 5개가 되면 안 된다.
+
+- `backend/lib/push.js` — 문구·시각 판단 등 순수 로직. `backend/lib/webpush.js` — `web-push` 껍데기.
+  이 둘은 우리 모델을 모른다. 그래서 `app.js`와 `reminders.js` 양쪽에서 써도 순환 import가 없다.
+- `backend/reminders.js` — 조회·발송. `server.js`가 DB 연결 후 `startReminderScheduler()`로 켠다.
+- 수동 실행: `node backend/scripts/send-reminders.js [--force]` (`--force`는 시각 검사를 건너뛴다).
+
+### 환경변수
+
+`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`), `VAPID_SUBJECT`,
+`REMINDER_TIME`(기본 `09:00`), 그리고 **`TZ=Asia/Seoul`**.
+
+- 키가 없으면 알림 라우트만 503이 되고 서버는 그대로 산다(JWT_SECRET과 같은 방식).
+  **VAPID 키도 모듈 로드 시점이 아니라 호출 시점에 읽는다** — 그러지 않으면 테스트가 환경변수를
+  나중에 넣는 패턴이 깨진다.
+- **`TZ`는 배포 환경에 진짜 환경변수로 넣어야 한다.** 컨테이너 기본값이 UTC라서, 없으면 `localDate()`가
+  한국 날짜와 어긋나 알림 시각도 복습 날짜도 하루씩 밀린다. `.env`로 넣는 것은 프로세스가 이미 뜬 뒤라
+  로컬에서는 확실하지 않다.
+
+### 하루 1건과 자기 복구
+
+보낼지 말지는 `shouldSendNow`가 정하는데, **"정각과 일치하는가"가 아니라 "지정 시각을 지났는데
+오늘 아직 안 보냈는가"**로 본다. 09:00:30에 재시작하거나 tick 하나를 놓쳐도 알림이 사라지지 않는다.
+"오늘 보냄" 표시는 구독 행의 `last_sent_date`에 남는다 — 기기별로 남으므로 기기가 둘이면 둘 다 받는다.
+발송에 실패하면 표시를 남기지 않아 다음 tick에 다시 시도하고, 404/410(만료)이면 그 구독 행을 지운다.
+
+### 구독은 기기 하나당 한 행
+
+`PushSubscription.endpoint`가 unique다. 같은 기기에서 다시 켜거나 **다른 계정으로 로그인하면
+upsert가 주인을 최신 계정으로 갈아끼운다.** 로그아웃할 때 구독을 지우지는 않는다.
+설정 화면의 기준은 서버가 아니라 브라우저다 — `pushManager.getSubscription()`이 있으면 켜진 것으로
+보고, 시트를 열 때 서버로 한 번 다시 올려 양쪽을 맞춘다.
+
+### 서비스 워커에 얹는 방식
+
+`push`·`notificationclick` 핸들러는 `frontend/public/push-sw.js`에 있고, 워크박스가 만든 워커가
+`importScripts`로 불러온다(`vite.config.js`의 `workbox.importScripts`).
+**`strategies`를 `injectManifest`로 바꾸지 않는다** — 그러면 `precacheAndRoute`와 `SKIP_WAITING`
+처리를 직접 떠안게 되어 위의 "설치한 앱(PWA)의 갱신" 약속이 깨진다. 빌드 후 `dist/sw.js`에
+`importScripts("/push-sw.js")`와 `SKIP_WAITING` 처리가 **둘 다** 있는지 확인할 것.
+
+`pushManager`는 서비스 워커 등록을 통해서만 닿는다. 등록은 `registerServiceWorker.js`의
+`getRegistration()`이 준다(같은 URL·scope의 `register()`는 브라우저가 같은 등록을 돌려주므로
+여러 번 불러도 된다 — 모듈에 캐시를 두지 않는다).
+
+### 로컬에서 확인하기
+
+**개발 서버(`npm run dev`)에는 서비스 워커가 없다**(`devOptions`를 켜지 않았다). 알림을 확인하려면
+빌드해서 띄운다:
+
+```
+cd frontend && npx vite build --mode development && npx vite preview
+```
+
+`--mode development`여야 `.env.local`의 로컬 API 주소를 쓴다. 그냥 `build`하면 `.env.production`의
+배포 주소가 박힌다. 09시를 기다리지 않으려면 설정 시트의 "테스트 알림 보내기"를 쓴다.
+
+### iOS
+
+iOS는 **홈 화면에 설치한 PWA에서만** 푸시가 온다(16.4+). 사파리 탭에서는 오지 않으므로,
+설정 화면은 iOS이면서 설치 상태가 아니면 토글 대신 설치 안내를 보여준다.
+
 ## TDD는 사용자가 요청할 때만 (Red → Green → Refactor)
 
 **기본값은 TDD가 아니다.** 평소에는 그냥 구현하고, 필요하면 구현 후 테스트를 붙인다.

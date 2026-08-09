@@ -6,6 +6,7 @@ import ReviewSection from './components/ReviewSection';
 import ProgressCheckModal from './components/ProgressCheckModal';
 import AuthScreen from './components/AuthScreen';
 import PasswordChangeModal from './components/PasswordChangeModal';
+import NotificationSettings from './components/NotificationSettings';
 import BottomTabBar from './components/BottomTabBar';
 import BottomSheet from './components/BottomSheet';
 import { PlusIcon } from './components/icons';
@@ -42,6 +43,7 @@ export default function App() {
   const [editingTodo, setEditingTodo] = useState(null);
   const [progressItems, setProgressItems] = useState(null);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
   const [isDraggingOverLeft, setDraggingOverLeft] = useState(false);
   const draggingTodoIdRef = useRef(null);
   const leftDragCount = useRef(0);
@@ -67,6 +69,7 @@ export default function App() {
     setError(null);
     setSheetOpen(false);
     setAccountMenuOpen(false);
+    setNotifyOpen(false);
   }, []);
 
   const authFetch = useMemo(
@@ -141,6 +144,8 @@ export default function App() {
     setSheetOpen(false);
     setEditingTodo(null);
   }, []);
+
+  const closeNotify = useCallback(() => setNotifyOpen(false), []);
 
   const createTodo = async (data) => {
     try {
@@ -272,6 +277,10 @@ export default function App() {
                   <div className="app-menu" role="menu">
                     <p className="app-menu-email" title={email}>{email}</p>
                     <button type="button" role="menuitem"
+                      onClick={() => { setAccountMenuOpen(false); setNotifyOpen(true); }}>
+                      알림 설정
+                    </button>
+                    <button type="button" role="menuitem"
                       onClick={() => { setAccountMenuOpen(false); setChangingPassword(true); }}>
                       비밀번호 변경
                     </button>
@@ -286,6 +295,7 @@ export default function App() {
           ) : (
             <>
               <span className="app-user-email" title={email}>{email}</span>
+              <button className="app-header-btn" type="button" onClick={() => setNotifyOpen(true)}>알림 설정</button>
               <button className="app-header-btn" type="button" onClick={() => setChangingPassword(true)}>비밀번호 변경</button>
               <button className="app-header-btn" type="button" onClick={logout}>로그아웃</button>
             </>
@@ -360,6 +370,12 @@ export default function App() {
       >
         <PlusIcon />
       </button>
+
+      {notifyOpen && (
+        <BottomSheet label="알림 설정" onClose={closeNotify}>
+          <NotificationSettings api={API} apiCall={apiCall} />
+        </BottomSheet>
+      )}
 
       {sheetOpen && (
         <BottomSheet label={editingTodo ? '할 일 수정' : '할 일 추가'} onClose={closeSheet}>

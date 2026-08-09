@@ -10,6 +10,8 @@ const {
   validateCredentials, validatePassword, normalizeEmail,
   signToken, verifyToken, extractBearerToken,
 } = require('./lib/auth');
+const { validateSubscription, toWebPushSubscription } = require('./lib/push');
+const webpush = require('./lib/webpush');
 
 const INTERVALS = [1, 3, 7, 16, 30];
 const BCRYPT_ROUNDS = 10;
@@ -64,9 +66,30 @@ const reviewSchema = new mongoose.Schema({
   completed_at: { type: String, default: null },
 });
 
-const User   = mongoose.model('User', userSchema);
-const Todo   = mongoose.model('Todo', todoSchema);
-const Review = mongoose.model('Review', reviewSchema);
+// 리마인더 잡은 사용자를 가리지 않고 "마감된 복습"을 훑는다 — userId 인덱스로는 도움이 안 된다.
+reviewSchema.index({ due_date: 1, completed: 1 });
+
+// 브라우저 하나(=기기 하나)당 한 행. endpoint가 곧 그 기기의 주소다.
+const pushSubscriptionSchema = new mongoose.Schema({
+  userId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  endpoint: { type: String, required: true, unique: true },
+  keys: {
+    p256dh: { type: String, required: true },
+    auth:   { type: String, required: true },
+  },
+  created_at: { type: String },
+  // 마지막으로 알림을 보낸 날. 재시작이나 tick 중복에도 하루 한 번만 보내게 하는 표시다.
+  last_sent_date: { type: String, default: null },
+});
+
+// 테스트 러너는 이 파일을 CJS와 ESM 두 갈래로 각각 평가할 수 있다(reminders.js는 require로,
+// 테스트는 import로 읽는다). 모델은 mongoose가 이름으로 하나만 들고 있으므로 이미 있으면 그것을 쓴다.
+const model = (name, schema) => mongoose.models[name] || mongoose.model(name, schema);
+
+const User   = model('User', userSchema);
+const Todo   = model('Todo', todoSchema);
+const Review = model('Review', reviewSchema);
+const PushSubscription = model('PushSubscription', pushSubscriptionSchema);
 
 // ── 유틸 ──────────────────────────────────────────
 // express 4는 async 핸들러가 던진 예외를 잡지 못해 요청이 그대로 매달린다.
@@ -223,6 +246,7 @@ app.put('/api/auth/password', requireAuth, wrap(async (req, res) => {
 // 여기부터 아래 모든 라우트는 로그인이 필요하다.
 app.use('/api/todos', requireAuth);
 app.use('/api/reviews', requireAuth);
+app.use('/api/push', requireAuth);
 
 // ── GET 전체 할일 ──────────────────────────────────
 app.get('/api/todos', wrap(async (req, res) => {
@@ -335,6 +359,71 @@ app.put('/api/reviews/:id/complete', wrap(async (req, res) => {
   res.json({ success: true });
 }));
 
+// ── 알림 구독 ─────────────────────────────────────
+// JWT_SECRET과 같은 방식: 키가 없으면 기능만 503으로 거절하고 서버는 계속 산다.
+function requireVapid(res) {
+  if (webpush.isConfigured()) return true;
+  res.status(503).json({ error: '서버에 알림 키가 설정되지 않았습니다. 관리자에게 문의하세요.' });
+  return false;
+}
+
+// 브라우저가 구독을 만들려면 공개키가 필요하다. 라우트로 주면 프론트를 다시 빌드하지 않고 키를 바꿀 수 있다.
+app.get('/api/push/public-key', (req, res) => {
+  if (!requireVapid(res)) return;
+  res.json({ publicKey: webpush.publicKey() });
+});
+
+// 같은 endpoint로 다시 부르면 갱신된다(upsert). 그래서 여러 번 눌러도, 다른 계정으로 로그인해도 안전하다.
+app.post('/api/push/subscribe', wrap(async (req, res) => {
+  if (!requireVapid(res)) return;
+
+  const check = validateSubscription(req.body.subscription || req.body);
+  if (!check.ok) return res.status(400).json({ error: check.error });
+
+  const { endpoint, keys } = check.subscription;
+  await PushSubscription.findOneAndUpdate(
+    { endpoint },
+    { userId: req.userId, endpoint, keys, created_at: localDate() },
+    { upsert: true, setDefaultsOnInsert: true }
+  );
+  res.json({ success: true });
+}));
+
+// 남의 기기 구독은 존재하지 않는 것처럼 취급한다.
+app.delete('/api/push/subscribe', wrap(async (req, res) => {
+  const endpoint = req.body?.endpoint;
+  if (typeof endpoint !== 'string' || !endpoint) {
+    return res.status(400).json({ error: '구독 주소가 없습니다.' });
+  }
+
+  const removed = await PushSubscription.findOneAndDelete({ endpoint, userId: req.userId });
+  if (!removed) return res.status(404).json({ error: 'not found' });
+  res.json({ success: true });
+}));
+
+// 09시를 기다리지 않고 알림 경로 전체를 확인하는 용도.
+app.post('/api/push/test', wrap(async (req, res) => {
+  if (!requireVapid(res)) return;
+
+  const subs = await PushSubscription.find({ userId: req.userId });
+  if (subs.length === 0) {
+    return res.status(400).json({ error: '이 기기에서 알림을 먼저 켜 주세요.' });
+  }
+
+  const payload = { title: '알림 테스트', body: '알림이 정상적으로 도착했습니다.' };
+  const results = await Promise.all(
+    subs.map(sub => webpush.sendTo(toWebPushSubscription(sub), payload))
+  );
+
+  // 만료된 구독은 여기서 정리한다 (알림을 끄지 않고 앱을 지운 기기 등)
+  const gone = subs.filter((_, i) => results[i].gone).map(s => s._id);
+  if (gone.length > 0) await PushSubscription.deleteMany({ _id: { $in: gone } });
+
+  const sent = results.filter(r => r.ok).length;
+  if (sent === 0) return res.status(502).json({ error: '알림을 보내지 못했습니다. 알림을 다시 켜 보세요.' });
+  res.json({ success: true, sent });
+}));
+
 // ── 에러 처리 ─────────────────────────────────────
 // 잘못된 형식의 id(CastError)는 사용자 실수이므로 404로, 나머지는 500으로.
 // eslint-disable-next-line no-unused-vars
@@ -344,4 +433,4 @@ app.use('/api', (err, req, res, next) => {
   res.status(500).json({ error: '서버 오류가 발생했습니다.' });
 });
 
-module.exports = { app, User, Todo, Review, INTERVALS };
+module.exports = { app, User, Todo, Review, PushSubscription, INTERVALS };
