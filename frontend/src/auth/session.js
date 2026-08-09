@@ -1,27 +1,10 @@
-// 로그인 세션(토큰 + 사용자 정보)을 브라우저에 보관한다.
-// 저장된 값은 사용자가 직접 고칠 수 있으므로 읽을 때마다 형태를 검사한다.
+// 로그인 세션을 이 브라우저에 보관한다.
+// "무엇이 올바른 세션인가"는 shared/session.js가 정한다 — 앱(mobile)과 같은 규칙을 쓴다.
+// 여기 있는 것은 localStorage라는 **보관 장소**에 관한 것뿐이다.
 
-export const STORAGE_KEY = 'study-todo-session';
+import { STORAGE_KEY, parseSession, serializeSession } from '../../../shared/session.js';
 
-/**
- * 세션으로 쓸 수 있는 형태인지 확인하고 필요한 필드만 남겨 돌려준다. 아니면 null.
- * 저장된 값을 읽을 때뿐 아니라 로그인 응답을 받아들일 때도 이 문을 지난다.
- */
-export function normalizeSession(data) {
-  if (!data || typeof data.token !== 'string' || !data.token) return null;
-  if (!data.user || typeof data.user.email !== 'string' || !data.user.email) return null;
-  return { token: data.token, user: { id: data.user.id, email: data.user.email } };
-}
-
-/** 저장된 문자열을 세션 객체로 되돌린다. 깨졌거나 형태가 다르면 null. */
-export function parseSession(raw) {
-  if (!raw) return null;
-  try {
-    return normalizeSession(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
+export { STORAGE_KEY, normalizeSession, parseSession } from '../../../shared/session.js';
 
 export function loadSession(storage = globalThis.localStorage) {
   try {
@@ -34,7 +17,7 @@ export function loadSession(storage = globalThis.localStorage) {
 
 export function saveSession(session, storage = globalThis.localStorage) {
   try {
-    storage?.setItem(STORAGE_KEY, JSON.stringify(session));
+    storage?.setItem(STORAGE_KEY, serializeSession(session));
   } catch { /* 저장에 실패해도 이번 세션은 메모리로 계속 쓴다 */ }
 }
 

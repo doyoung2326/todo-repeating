@@ -1,0 +1,14 @@
+{
+  "name": "study-todo-shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "웹(frontend)과 앱(mobile)이 함께 쓰는 순수 로직. 화면 기술에 의존하지 않는다.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

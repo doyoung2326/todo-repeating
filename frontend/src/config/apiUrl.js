@@ -1,25 +1,17 @@
-// API 주소 결정 + 프로덕션 빌드 가드.
-// Vite는 환경변수를 빌드 시점에 번들에 박아넣으므로, 값이 잘못되면
-// 런타임에 고칠 수 없다. 잘못된 번들이 배포되느니 빌드를 실패시킨다.
+// Vite에서 API 주소를 읽는 자리. 판단 자체는 shared/apiUrl.js가 한다 —
+// 앱(mobile)도 같은 규칙을 쓰되 변수 이름과 등록하는 곳만 다르다.
+
+import { resolveApiUrl as resolve } from '../../../shared/apiUrl.js';
 
 const SETUP_HINT =
   'Vercel → Settings → Environment Variables에 VITE_API_URL을 등록하세요 ' +
   '(예: https://todo-repeating-production.up.railway.app/api).';
 
+/** vite.config.js와 앱 코드가 함께 쓴다. `env`는 loadEnv 또는 import.meta.env. */
 export function resolveApiUrl(env, mode) {
-  const url = env.VITE_API_URL;
-
-  if (mode !== 'production') {
-    return url || '/api';
-  }
-
-  if (!url) {
-    throw new Error(`프로덕션 빌드에는 VITE_API_URL이 필요합니다. ${SETUP_HINT}`);
-  }
-  if (!/^https?:\/\//.test(url)) {
-    throw new Error(
-      `VITE_API_URL은 http(s)://로 시작하는 절대 URL이어야 합니다. 받은 값: "${url}". ${SETUP_HINT}`
-    );
-  }
-  return url;
+  return resolve({
+    url: env.VITE_API_URL,
+    isProd: mode === 'production',
+    setupHint: SETUP_HINT,
+  });
 }
