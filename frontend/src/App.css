@@ -79,9 +79,23 @@
 /* ── 리셋 ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body, #root { height: 100%; }
+html, #root { height: 100%; }
+
+/* 문서(브라우저) 자체는 절대 스크롤되지 않는다. 스크롤은 안쪽 `.col`과 시트만 한다.
+   - height를 100%로 두면 그 기준이 "주소창이 접힌 높이"(큰 뷰포트)라서, 주소창이 떠 있는 동안
+     그 차이만큼 문서가 길어진다 → 밀면 헤더·탭바까지 화면이 통째로 딸려 올라간다. dvh로 맞춘다.
+   - iOS 사파리는 body의 overflow: hidden을 무시할 때가 있어 position: fixed로 한 번 더 못박는다.
+   - overscroll-behavior: none은 끝까지 밀었을 때의 고무줄 튕김을 막는다. */
+html { overflow: hidden; overscroll-behavior: none; }
 
 body {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
   font-family: var(--font-body);
   font-size: var(--fs-base);
   background: var(--bg);
