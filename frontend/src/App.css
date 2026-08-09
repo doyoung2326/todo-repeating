@@ -72,9 +72,16 @@
   /* 떠 있는 하단 탭바 — 높이와 화면 끝에서 띄우는 거리.
      + 버튼 위치와 열 아래 여백이 이 값들로 계산된다. */
   --tabbar-h:    60px;
-  --tabbar-gap:  1.1rem;
+  --tabbar-gap:  .7rem;
 }
 /* theme:end */
+
+/* 탭바 아랫변이 화면 끝에서 떨어지는 거리. 안전영역(아이폰 홈 인디케이터)이 있으면 그것으로
+   충분하므로 위에 여백을 또 얹지 않는다 — 둘을 더하면 붕 뜬다. 안전영역이 없는 기기에서는
+   --tabbar-gap이 대신 띄운다. + 버튼과 열 아래 여백도 이 값 위에 쌓는다. */
+:root {
+  --tabbar-bottom: max(var(--tabbar-gap), env(safe-area-inset-bottom, 0px));
+}
 
 /* ── 리셋 ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -258,8 +265,7 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
   gap: var(--gap);
   /* 탭바와 + 버튼이 이 열 위에 떠 있으므로, 마지막 항목이 가리지 않을 만큼 비워둔다.
      (탭바 + 띄운 거리 + 그 위의 + 버튼) */
-  padding-bottom: calc(var(--tabbar-h) + var(--tabbar-gap) * 2 + 52px + 1rem
-                       + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--tabbar-bottom) + var(--tabbar-h) + var(--tabbar-gap) + 52px + 1rem);
 }
 
 .app[data-tab="today"]  .col-today  { display: flex; }
@@ -966,7 +972,7 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .tabbar {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px));
+  bottom: var(--tabbar-bottom);
   transform: translateX(-50%);
   z-index: 40;
   display: flex;
@@ -1021,7 +1027,7 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .fab {
   position: absolute;
   right: 1rem;
-  bottom: calc(var(--tabbar-h) + var(--tabbar-gap) * 2 + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--tabbar-bottom) + var(--tabbar-h) + var(--tabbar-gap));
   z-index: 45;
   width: 52px; height: 52px;
   border-radius: 999px;
@@ -1084,7 +1090,7 @@ button { cursor: pointer; font-family: inherit; border: none; background: none; 
 .update-prompt {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + var(--tabbar-gap) * 2 + 52px + 1rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--tabbar-bottom) + var(--tabbar-h) + var(--tabbar-gap) + 52px + 1rem);
   transform: translateX(-50%);
   z-index: 80;
   max-width: calc(100% - 2rem);
