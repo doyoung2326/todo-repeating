@@ -10,7 +10,7 @@ import { normalizeSession } from '@shared/session.js';
 import { authenticate } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { PRIVACY_URL } from '@/constants/links';
-import { colors, radius, TAP, INPUT_FONT_SIZE } from '@/constants/tokens';
+import { colors, fontFamily, INPUT_FONT_SIZE, radius, TAP } from '@/constants/tokens';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -153,9 +153,9 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   brand: { alignItems: 'center', gap: 4, marginBottom: 4 },
-  brandTitle: { fontSize: 22, fontWeight: '700', color: colors.text },
-  brandSub: { fontSize: 13, color: colors.muted },
-  heading: { fontSize: 17, fontWeight: '600', color: colors.text },
+  brandTitle: { fontFamily: fontFamily.display, fontSize: 22, color: colors.text },
+  brandSub: { fontFamily: fontFamily.body, fontSize: 13, color: colors.muted },
+  heading: { fontFamily: fontFamily.body, fontSize: 17, fontWeight: '600', color: colors.text },
   error: {
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
@@ -163,12 +163,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     fontSize: 14,
+    fontFamily: fontFamily.body,
   },
   field: { gap: 6 },
-  label: { fontSize: 13, color: colors.muted },
+  label: { fontFamily: fontFamily.body, fontSize: 13, color: colors.muted },
   input: {
     // 16px 미만으로 두지 않는다 — iOS가 누를 때 화면을 확대한다.
     fontSize: INPUT_FONT_SIZE,
+    fontFamily: fontFamily.body,
     color: colors.text,
     minHeight: TAP,
     borderWidth: 1,
@@ -186,8 +188,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   submitDim: { opacity: 0.7 },
-  submitText: { color: colors.onAccent, fontSize: 16, fontWeight: '600' },
+  submitText: { fontFamily: fontFamily.body, color: colors.onAccent, fontSize: 16, fontWeight: '600' },
   switch: { minHeight: TAP, alignItems: 'center', justifyContent: 'center' },
-  switchText: { color: colors.accent, fontSize: 14 },
-  foot: { textAlign: 'center', color: colors.muted, fontSize: 13, textDecorationLine: 'underline' },
+  switchText: { fontFamily: fontFamily.body, color: colors.accent, fontSize: 14 },
+  foot: { fontFamily: fontFamily.body, textAlign: 'center', color: colors.muted, fontSize: 13, textDecorationLine: 'underline' },
 });

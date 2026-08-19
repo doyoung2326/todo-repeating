@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 
+import { ConfirmModal } from '@/components/confirm-modal';
 import { DeleteAccountModal } from '@/components/delete-account-modal';
+import { useTabBarSpace } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth-context';
 import { PRIVACY_URL } from '@/constants/links';
-import { colors, radius, TAP } from '@/constants/tokens';
+import { colors, fontFamily, radius, TAP } from '@/constants/tokens';
 
 /**
  * 설정 — 계정에 관한 것만 모여 있다.
@@ -18,13 +20,8 @@ import { colors, radius, TAP } from '@/constants/tokens';
 export default function SettingsScreen() {
   const { session, api, signOut } = useAuth();
   const [deleting, setDeleting] = useState(false);
-
-  function confirmSignOut() {
-    Alert.alert('로그아웃', '이 기기에서 로그아웃할까요?', [
-      { text: '취소', style: 'cancel' },
-      { text: '로그아웃', style: 'destructive', onPress: () => { void signOut(); } },
-    ]);
-  }
+  const [signingOut, setSigningOut] = useState(false);
+  const tabBar = useTabBarSpace();
 
   // 서버가 계정을 지우고 나면 남은 토큰은 이미 죽어 있다. 이 기기의 세션만 지우면 된다.
   // 오류는 잡지 않고 그대로 던진다 — 창이 받아서 그 안에 보여준다.
@@ -39,7 +36,7 @@ export default function SettingsScreen() {
         <Text style={styles.title}>설정</Text>
       </View>
 
-      <View style={styles.body}>
+      <View style={[styles.body, { paddingBottom: tabBar.total }]}>
         <View style={styles.group}>
           <Text style={styles.groupLabel}>계정</Text>
           <View style={styles.card}>
@@ -52,7 +49,7 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.group}>
-          <Row label="로그아웃" onPress={confirmSignOut} />
+          <Row label="로그아웃" onPress={() => setSigningOut(true)} />
           <Row label="회원 탈퇴" tone="danger" onPress={() => setDeleting(true)} />
         </View>
 
@@ -60,6 +57,16 @@ export default function SettingsScreen() {
           탈퇴하면 할 일·복습 기록·알림 설정이 모두 삭제되며 되돌릴 수 없습니다.
         </Text>
       </View>
+
+      <ConfirmModal
+        visible={signingOut}
+        title="로그아웃"
+        message="이 기기에서 로그아웃할까요?"
+        confirmLabel="로그아웃"
+        tone="danger"
+        onConfirm={() => { void signOut(); }}
+        onClose={() => setSigningOut(false)}
+      />
 
       <DeleteAccountModal
         visible={deleting}
@@ -89,11 +96,11 @@ function Row({ label, onPress, tone = 'normal' }: {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text },
+  title: { fontFamily: fontFamily.body, fontSize: 20, fontWeight: '700', color: colors.text },
   body: { paddingHorizontal: 16, gap: 20 },
 
   group: { gap: 6 },
-  groupLabel: { fontSize: 12, fontWeight: '600', color: colors.muted, paddingHorizontal: 2 },
+  groupLabel: { fontFamily: fontFamily.body, fontSize: 12, fontWeight: '600', color: colors.muted, paddingHorizontal: 2 },
 
   card: {
     minHeight: TAP,
@@ -104,7 +111,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.card,
   },
-  email: { fontSize: 15, color: colors.text },
+  email: { fontFamily: fontFamily.body, fontSize: 15, color: colors.text },
 
   row: {
     minHeight: TAP,
@@ -116,8 +123,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   rowPressed: { opacity: 0.6 },
-  rowText: { fontSize: 15, color: colors.text },
+  rowText: { fontFamily: fontFamily.body, fontSize: 15, color: colors.text },
   rowTextDanger: { color: colors.danger, fontWeight: '600' },
 
-  note: { fontSize: 12, color: colors.muted, lineHeight: 18, paddingHorizontal: 2 },
+  note: { fontFamily: fontFamily.body, fontSize: 12, color: colors.muted, lineHeight: 18, paddingHorizontal: 2 },
 });

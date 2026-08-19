@@ -9,6 +9,9 @@
  * 때문이다. 웹 쪽(frontend/src/config/links.js)만 `/privacy.html`을 그대로 쓰는데,
  * 설치한 PWA의 서비스 워커가 프리캐시해 둔 키가 그 주소라서다.
  *
- * ★ 도메인은 실제 Vercel 배포 주소로 확인할 것. 잘못 박히면 심사에서 링크가 죽는다.
+ * 도메인은 저장소 이름(todo-repeating)을 따라간다 — Vercel이 그렇게 만든다.
+ * 한때 `study-todo.vercel.app`이 박혀 있었는데 **그것은 남이 선점한 주소**라
+ * /privacy가 404였다. 도메인을 바꿀 일이 있으면 브라우저로 열어 200을 직접 확인할 것 —
+ * 심사에 제출하는 링크가 죽어 있으면 그것만으로 반려된다.
  */
-export const PRIVACY_URL = 'https://study-todo.vercel.app/privacy';
+export const PRIVACY_URL = 'https://todo-repeating.vercel.app/privacy';

@@ -1,15 +1,29 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { localToday, msUntilMidnight } from '@shared/dates.js';
-import { SessionExpiredError, type Todo } from './api';
+import { SessionExpiredError, type Category, type Todo } from './api';
 import { useAuth } from './auth-context';
 
 type TodosValue = {
   todos: Todo[];
+  /**
+   * 성격 목록. **배열이면 "이것이 전부", null이면 "아직 모른다"**이고 둘을 뭉뚱그리면 안 된다 —
+   * 못 받아온 것을 "없다"로 읽으면 폼이 멀쩡한 성격을 지운다(웹 TodoForm과 같은 약속).
+   */
+  categories: Category[] | null;
+  /** 성격을 id로 찾는 표. 할 일에는 `category_id`만 들어 있다. */
+  categoryById: Map<string, Category>;
   today: string;
   loading: boolean;
   error: string | null;
-  reload: () => Promise<void>;
+  /**
+   * 방금 누른 동작이 실패했다는 알림.
+   * 목록 자체는 멀쩡하다는 점에서 error(목록을 못 받아왔다)와 다르다.
+   */
+  notice: string | null;
+  notify: (message: string) => void;
+  /** 당겨서 새로고침 — 할 일과 성격을 함께 다시 받는다. */
+  refresh: () => Promise<void>;
   /** 서버를 고치고 목록을 다시 받아온다. 실패하면 문구를 돌려준다(화면이 알린다). */
   mutate: (fn: () => Promise<unknown>) => Promise<string | null>;
 };
@@ -23,9 +37,12 @@ const TodosContext = createContext<TodosValue | null>(null);
 export function TodosProvider({ children }: { children: ReactNode }) {
   const { api, session } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
+  // null은 '아직 못 받아왔다'. []는 '정말 하나도 없다'. 폼이 이 둘을 다르게 다룬다.
+  const [categories, setCategories] = useState<Category[] | null>(null);
   const [today, setToday] = useState(localToday);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const account = session?.user?.email;
 
@@ -33,6 +50,8 @@ export function TodosProvider({ children }: { children: ReactNode }) {
     try {
       setTodos(await api.listTodos());
       setError(null);
+      // 다시 받아오는 데 성공했으면 앞서 실패한 동작의 문구도 함께 걷는다.
+      setNotice(null);
     } catch (e) {
       // 세션 만료는 실패가 아니다 — 이미 로그인 화면으로 넘어가 있다.
       if (!(e instanceof SessionExpiredError)) {
@@ -43,11 +62,33 @@ export function TodosProvider({ children }: { children: ReactNode }) {
     }
   }, [api]);
 
+  // 성격은 못 받아와도 화면이 선다 — 칩만 안 그려질 뿐이다. 그래서 오류를 알리지 않는다.
+  const reloadCategories = useCallback(async () => {
+    try {
+      setCategories(await api.listCategories());
+    } catch { /* 무시 */ }
+  }, [api]);
+
+  const refresh = useCallback(async () => {
+    await Promise.all([reload(), reloadCategories()]);
+  }, [reload, reloadCategories]);
+
   useEffect(() => {
-    if (!account) return;
+    // 로그아웃 상태에서는 받아올 것이 없다. 여기서 그냥 돌아가면 loading이 처음 값인
+    // true로 남아 화면이 영영 스피너만 돈다.
+    // 앞 사용자의 것도 함께 비운다 — 남겨 두면 다음 사람이 잠깐 남의 할 일을 본다.
+    if (!account) {
+      setTodos([]);
+      setCategories(null);
+      setError(null);
+      setNotice(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     void reload();
-  }, [account, reload]);
+    void reloadCategories();
+  }, [account, reload, reloadCategories]);
 
   // 자정을 넘기면 "오늘"이 바뀐다. 갱신하는 장치가 없으면 화면은 어제에 머물러 있다가
   // 엉뚱한 리렌더가 일어나는 순간 갑자기 하루를 건너뛴다.
@@ -80,9 +121,16 @@ export function TodosProvider({ children }: { children: ReactNode }) {
     }
   }, [reload]);
 
+  const notify = useCallback((message: string) => setNotice(message), []);
+
+  const categoryById = useMemo(
+    () => new Map((categories ?? []).map(c => [String(c.id), c])),
+    [categories]
+  );
+
   const value = useMemo(
-    () => ({ todos, today, loading, error, reload, mutate }),
-    [todos, today, loading, error, reload, mutate]
+    () => ({ todos, categories, categoryById, today, loading, error, notice, notify, refresh, mutate }),
+    [todos, categories, categoryById, today, loading, error, notice, notify, refresh, mutate]
   );
 
   return <TodosContext.Provider value={value}>{children}</TodosContext.Provider>;
@@ -92,4 +140,21 @@ export function useTodos(): TodosValue {
   const value = useContext(TodosContext);
   if (!value) throw new Error('useTodos는 TodosProvider 안에서만 쓸 수 있습니다.');
   return value;
+}
+
+/**
+ * 서버를 고치고, 실패하면 사용자에게 알린다. 성공은 목록이 바뀌는 것으로 이미 보인다.
+ *
+ * **`Alert.alert`으로 알리지 않는다** — react-native-web의 Alert는 본문이 빈 함수라
+ * 웹에서 개발할 때 실패가 조용히 묻힌다(눌렀는데 아무 일도 안 일어나는 것처럼 보인다).
+ * 화면 위쪽 띠에 남기면 웹·앱 양쪽에서 보이고, 항목을 누를 때마다 창이 뜨지 않아
+ * 덜 거슬린다. 띠는 다음에 목록을 다시 받아오는 데 성공하면 걷힌다.
+ */
+export function useReportedMutate() {
+  const { mutate, notify } = useTodos();
+  return (what: string, fn: () => Promise<unknown>) => {
+    void mutate(fn).then(message => {
+      if (message) notify(`${what}: ${message}`);
+    });
+  };
 }
