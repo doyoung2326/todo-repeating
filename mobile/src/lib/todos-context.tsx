@@ -9,6 +9,12 @@ type TodosValue = {
   today: string;
   loading: boolean;
   error: string | null;
+  /**
+   * 방금 누른 동작이 실패했다는 알림.
+   * 목록 자체는 멀쩡하다는 점에서 error(목록을 못 받아왔다)와 다르다.
+   */
+  notice: string | null;
+  notify: (message: string) => void;
   reload: () => Promise<void>;
   /** 서버를 고치고 목록을 다시 받아온다. 실패하면 문구를 돌려준다(화면이 알린다). */
   mutate: (fn: () => Promise<unknown>) => Promise<string | null>;
@@ -26,6 +32,7 @@ export function TodosProvider({ children }: { children: ReactNode }) {
   const [today, setToday] = useState(localToday);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const account = session?.user?.email;
 
@@ -33,6 +40,8 @@ export function TodosProvider({ children }: { children: ReactNode }) {
     try {
       setTodos(await api.listTodos());
       setError(null);
+      // 다시 받아오는 데 성공했으면 앞서 실패한 동작의 문구도 함께 걷는다.
+      setNotice(null);
     } catch (e) {
       // 세션 만료는 실패가 아니다 — 이미 로그인 화면으로 넘어가 있다.
       if (!(e instanceof SessionExpiredError)) {
@@ -44,7 +53,16 @@ export function TodosProvider({ children }: { children: ReactNode }) {
   }, [api]);
 
   useEffect(() => {
-    if (!account) return;
+    // 로그아웃 상태에서는 받아올 것이 없다. 여기서 그냥 돌아가면 loading이 처음 값인
+    // true로 남아 화면이 영영 스피너만 돈다.
+    // 앞 사용자의 목록도 함께 비운다 — 남겨 두면 다음 사람이 잠깐 남의 할 일을 본다.
+    if (!account) {
+      setTodos([]);
+      setError(null);
+      setNotice(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     void reload();
   }, [account, reload]);
@@ -80,9 +98,11 @@ export function TodosProvider({ children }: { children: ReactNode }) {
     }
   }, [reload]);
 
+  const notify = useCallback((message: string) => setNotice(message), []);
+
   const value = useMemo(
-    () => ({ todos, today, loading, error, reload, mutate }),
-    [todos, today, loading, error, reload, mutate]
+    () => ({ todos, today, loading, error, notice, notify, reload, mutate }),
+    [todos, today, loading, error, notice, notify, reload, mutate]
   );
 
   return <TodosContext.Provider value={value}>{children}</TodosContext.Provider>;

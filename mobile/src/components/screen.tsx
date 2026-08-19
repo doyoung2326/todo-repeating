@@ -16,7 +16,7 @@ export function Screen({ title, count, children }: {
   count?: number;
   children: ReactNode;
 }) {
-  const { loading, error, reload } = useTodos();
+  const { loading, error, notice, reload } = useTodos();
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -28,6 +28,10 @@ export function Screen({ title, count, children }: {
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
+
+      {/* 목록은 멀쩡한데 방금 누른 동작만 실패한 경우. 둘은 함께 뜰 수 있다 —
+          서버가 죽으면 목록도 못 받고 동작도 실패하므로 각각이 사실이다. */}
+      {notice && <Text style={styles.error}>{notice}</Text>}
 
       <ScrollView
         contentContainerStyle={styles.body}

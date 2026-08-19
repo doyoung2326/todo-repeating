@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 
+import { ConfirmModal } from '@/components/confirm-modal';
 import { DeleteAccountModal } from '@/components/delete-account-modal';
 import { useAuth } from '@/lib/auth-context';
 import { PRIVACY_URL } from '@/constants/links';
@@ -18,13 +19,7 @@ import { colors, radius, TAP } from '@/constants/tokens';
 export default function SettingsScreen() {
   const { session, api, signOut } = useAuth();
   const [deleting, setDeleting] = useState(false);
-
-  function confirmSignOut() {
-    Alert.alert('로그아웃', '이 기기에서 로그아웃할까요?', [
-      { text: '취소', style: 'cancel' },
-      { text: '로그아웃', style: 'destructive', onPress: () => { void signOut(); } },
-    ]);
-  }
+  const [signingOut, setSigningOut] = useState(false);
 
   // 서버가 계정을 지우고 나면 남은 토큰은 이미 죽어 있다. 이 기기의 세션만 지우면 된다.
   // 오류는 잡지 않고 그대로 던진다 — 창이 받아서 그 안에 보여준다.
@@ -52,7 +47,7 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.group}>
-          <Row label="로그아웃" onPress={confirmSignOut} />
+          <Row label="로그아웃" onPress={() => setSigningOut(true)} />
           <Row label="회원 탈퇴" tone="danger" onPress={() => setDeleting(true)} />
         </View>
 
@@ -60,6 +55,16 @@ export default function SettingsScreen() {
           탈퇴하면 할 일·복습 기록·알림 설정이 모두 삭제되며 되돌릴 수 없습니다.
         </Text>
       </View>
+
+      <ConfirmModal
+        visible={signingOut}
+        title="로그아웃"
+        message="이 기기에서 로그아웃할까요?"
+        confirmLabel="로그아웃"
+        tone="danger"
+        onConfirm={() => { void signOut(); }}
+        onClose={() => setSigningOut(false)}
+      />
 
       <DeleteAccountModal
         visible={deleting}

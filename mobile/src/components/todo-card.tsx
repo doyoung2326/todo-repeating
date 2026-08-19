@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { daysDiff } from '@shared/dates.js';
 import { IMP_LABELS, STAGE_LABELS, progressLevel } from '@shared/labels.js';
@@ -80,12 +80,19 @@ export function CardButton({ label, onPress, tone = 'normal' }: {
   );
 }
 
-/** 실패하면 사용자에게 알린다. 성공은 목록이 바뀌는 것으로 이미 보인다. */
+/**
+ * 실패하면 사용자에게 알린다. 성공은 목록이 바뀌는 것으로 이미 보인다.
+ *
+ * **`Alert.alert`으로 알리지 않는다** — react-native-web의 Alert는 본문이 빈 함수라
+ * 웹에서 개발할 때 실패가 조용히 묻힌다(눌렀는데 아무 일도 안 일어나는 것처럼 보인다).
+ * 화면 위쪽 띠에 남기면 웹·앱 양쪽에서 보이고, 항목을 누를 때마다 창이 뜨지 않아
+ * 덜 거슬린다. 띠는 다음에 무언가 성공하면 reload가 걷어 간다.
+ */
 export function useReportedMutate() {
-  const { mutate } = useTodos();
+  const { mutate, notify } = useTodos();
   return (what: string, fn: () => Promise<unknown>) => {
     void mutate(fn).then(message => {
-      if (message) Alert.alert(what, message);
+      if (message) notify(`${what}: ${message}`);
     });
   };
 }
