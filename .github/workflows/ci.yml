@@ -1,0 +1,85 @@
+# push와 PR마다 세 패키지의 테스트와 웹 빌드를 돌린다.
+# 사람이 기억해서 `npm test`를 치지 않아도 "지금 초록인가"에 답이 나오도록 하는 것이 전부다.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# 같은 브랜치에 연달아 push하면 이전 실행은 취소한다. 어차피 최신 것만 보면 된다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      # 러너는 UTC다. backend/lib/dates.js의 localDate()는 아직 시각을 주입받지 않아
+      # 라우트를 거치는 테스트가 실제 오늘을 쓰므로, 그대로 두면 한국 시간 00~09시에
+      # 도는 CI만 날짜가 하루 어긋나 간헐적으로 빨개진다. 배포 환경과 같은 값으로 맞춘다.
+      TZ: Asia/Seoul
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          # 워크스페이스로 묶지 않았으므로 lockfile을 하나씩 적어준다.
+          cache-dependency-path: |
+            shared/package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      # mongodb-memory-server가 쓰는 MongoDB 바이너리. 캐시하지 않으면 매 실행마다 새로 받는다.
+      - name: MongoDB 바이너리 캐시
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: mongodb-binaries-${{ runner.os }}-
+
+      # 설치·테스트를 패키지마다 나눠 둔다. 한 단계에 몰면 어디가 깨졌는지 화면에서 안 보인다.
+      # 루트는 설치하지 않는다 — 루트의 test 스크립트는 세 패키지에 위임만 한다.
+      - name: 설치 (shared)
+        run: npm ci --prefix shared
+
+      - name: 설치 (backend)
+        run: npm ci --prefix backend
+
+      - name: 설치 (frontend)
+        run: npm ci --prefix frontend
+
+      - name: 테스트 (shared)
+        run: npm test --prefix shared
+
+      - name: 테스트 (backend)
+        run: npm test --prefix backend
+
+      - name: 테스트 (frontend)
+        run: npm test --prefix frontend
+
+      # 테스트가 잡지 못하는 것을 잡는다 — import 오류, PWA 플러그인 설정 파손.
+      # .env.production은 저장소에 없으므로(.gitignore) 주소를 여기서 넣어야 한다.
+      # shared/apiUrl.js의 가드가 값이 없으면 빌드를 일부러 실패시키기 때문이다.
+      # 가짜 값이어도 된다 — 확인하려는 것은 주소가 맞는지가 아니라 번들이 만들어지는지다.
+      # 진짜 주소는 배포 시 Vercel 환경변수에서 온다.
+      - name: 웹 빌드
+        working-directory: frontend
+        env:
+          VITE_API_URL: https://ci.invalid/api
+        run: npm run build
+
+      # CLAUDE.md가 "빌드 후 dist/sw.js에서 확인할 것"이라고 두 번 적어둔 검사.
+      # 이것이 깨지면 설치된 PWA가 영영 갱신되지 않는데, 증상은 며칠 뒤 사용자 기기에서야 드러난다.
+      - name: 서비스 워커에 푸시 핸들러와 SKIP_WAITING이 남아 있는지
+        working-directory: frontend
+        run: |
+          grep -qF 'importScripts("/push-sw.js")' dist/sw.js \
+            || { echo '::error::dist/sw.js에 importScripts("/push-sw.js")가 없다. vite.config.js의 workbox.importScripts를 확인할 것 — 푸시 알림이 오지 않는다.'; exit 1; }
+          grep -qF 'SKIP_WAITING' dist/sw.js \
+            || { echo '::error::dist/sw.js에 SKIP_WAITING 처리가 없다. VitePWA의 strategies/registerType을 확인할 것 — 설치된 앱이 새 버전으로 갱신되지 않는다.'; exit 1; }

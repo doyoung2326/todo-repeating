@@ -13,11 +13,12 @@ const base = {
 const noop = () => {};
 
 /** 이 컴포넌트는 시계를 읽지 않고 today를 prop으로 받는다 — 날짜를 그냥 넘겨주면 된다. */
-function renderItem(todo) {
+function renderItem(todo, categoryById) {
   return render(
     <TodoItem
       todo={{ ...base, ...todo }}
       today={TODAY}
+      categoryById={categoryById}
       onComplete={noop} onEdit={noop} onDelete={noop} onCompleteReview={noop}
     />
   );
@@ -76,5 +77,31 @@ describe('TodoItem — 복습 뱃지', () => {
   it('복습이 전부 끝나면 끝났다고 알려준다', () => {
     renderItem({ completed: 1, needs_review: 1, activeReview: null });
     expect(screen.getByText('복습 전부 완료')).toBeInTheDocument();
+  });
+});
+
+describe('TodoItem — 성격 칩', () => {
+  const categories = new Map([['c1', { id: 'c1', name: '영어', color: 3 }]]);
+
+  it('성격이 붙은 할 일에는 성격 이름을 보여준다', () => {
+    renderItem({ category_id: 'c1' }, categories);
+    expect(screen.getByText('영어')).toBeInTheDocument();
+  });
+
+  it('성격이 없으면 칩을 그리지 않는다', () => {
+    renderItem({ category_id: null }, categories);
+    expect(screen.queryByText('영어')).not.toBeInTheDocument();
+  });
+
+  // 성격을 막 지운 순간. 서버도 할 일을 비우지만 트랜잭션이 없어 그 사이가 있다.
+  it('가리키는 성격이 목록에 없으면 칩을 그리지 않는다', () => {
+    renderItem({ category_id: '이미-지운-성격' }, categories);
+    expect(screen.queryByText('영어')).not.toBeInTheDocument();
+  });
+
+  // 목록을 아직 못 받아온 화면에서도 줄은 그려져야 한다
+  it('성격 목록을 넘겨주지 않아도 할 일은 그대로 그린다', () => {
+    renderItem({ category_id: 'c1' }, undefined);
+    expect(screen.getByText('수학 문제집')).toBeInTheDocument();
   });
 });

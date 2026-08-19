@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
+import { CAT_SLOTS, CAT_COLOR_LABELS } from '../theme';
 import './ThemePanel.css';
 
 /**
@@ -39,6 +40,13 @@ const COLOR_GROUPS = [
       { name: '--imp-2', label: '중간' },
       { name: '--imp-3', label: '높음' },
     ],
+  },
+  {
+    // 여덟 칸의 대표색만 등록한다. 칩의 배경·글자(--cat-N-bg/-fg)까지 넣으면
+    // 패널이 스와치 벽이 된다 — 중요도도 같은 이유로 대표색 셋만 올라와 있다.
+    // 색을 다른 계열로 바꿨다면 shared/labels.js의 CAT_COLOR_LABELS도 같이 고친다.
+    legend: '성격',
+    rows: CAT_SLOTS.map(n => ({ name: `--cat-${n}`, label: `${n}번 ${CAT_COLOR_LABELS[n]}` })),
   },
 ];
 

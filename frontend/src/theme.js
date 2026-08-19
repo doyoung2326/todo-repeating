@@ -11,7 +11,9 @@
 
 import { progressLevel } from '../../shared/labels.js';
 
-export { STAGE_LABELS, IMP_LABELS } from '../../shared/labels.js';
+import { CAT_SLOTS } from '../../shared/labels.js';
+
+export { STAGE_LABELS, IMP_LABELS, CAT_SLOTS, CAT_COLOR_LABELS } from '../../shared/labels.js';
 export { formatKoreanDate } from '../../shared/dates.js';
 
 export const IMP_COLORS = {
@@ -19,6 +21,15 @@ export const IMP_COLORS = {
   2: 'var(--imp-2)',
   3: 'var(--imp-3)',
 };
+
+/* 성격의 색 칸(1~8) → CSS 변수. 칸 번호만 저장하고 색은 App.css에만 두는 덕분에
+   화면 조정 패널로 여덟 색을 그대로 맞출 수 있다. */
+const slotMap = suffix =>
+  Object.fromEntries(CAT_SLOTS.map(n => [n, `var(--cat-${n}${suffix})`]));
+
+export const CAT_COLORS = slotMap('');      // 색 고르는 칸의 채움
+export const CAT_BG     = slotMap('-bg');   // 칩 배경
+export const CAT_FG     = slotMap('-fg');   // 칩 글자
 
 const PROGRESS_COLORS = {
   low:  'var(--prog-low)',

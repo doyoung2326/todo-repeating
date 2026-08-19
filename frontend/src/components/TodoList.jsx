@@ -3,7 +3,7 @@ import TodoItem from './TodoItem';
 import { ChevronIcon } from './icons';
 
 export default function TodoList({
-  incompleteTodos, completedTodos, archivedTodos = [], today, compact,
+  incompleteTodos, completedTodos, archivedTodos = [], today, compact, categoryById,
   onComplete, onEdit, onDelete, onCompleteReview, onAddToToday, onDragStart, onDragEnd,
 }) {
   // 보관됨은 항상 접힌 채로 시작한다. 기억해 두면 "다 끝난 것"이 다시 목록을 덮는다.
@@ -20,7 +20,7 @@ export default function TodoList({
   }
 
   const itemProps = {
-    today, compact,
+    today, compact, categoryById,
     onComplete, onEdit, onDelete, onCompleteReview, onAddToToday, onDragStart, onDragEnd,
   };
 
