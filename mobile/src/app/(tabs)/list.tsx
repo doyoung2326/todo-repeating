@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 
+import { Fab } from '@/components/fab';
 import { Screen } from '@/components/screen';
 import { CollapsibleSection, EmptyCard, Section } from '@/components/section';
 import { TodoItem } from '@/components/todo-item';
+import { useTodoFormSheet } from '@/components/todo-form-sheet';
 import type { Todo } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useReportedMutate, useTodos } from '@/lib/todos-context';
@@ -21,6 +23,7 @@ export default function ListScreen() {
   const { todos, today } = useTodos();
   const { api } = useAuth();
   const run = useReportedMutate();
+  const form = useTodoFormSheet();
   const [showArchived, setShowArchived] = useState(false);
 
   const { incomplete, completed, archived } = useMemo(() => ({
@@ -38,35 +41,41 @@ export default function ListScreen() {
       run('복습 완료 실패', () => api.completeReview(reviewId)),
     onAddToToday: (id: string) =>
       run('등록 실패', () => api.setPerformDate(id, today)),
+    onEdit: form.openEdit,
   };
 
   const rows = (list: Todo[]) =>
     list.map((t, i) => <TodoItem key={t.id} todo={t} first={i === 0} {...handlers} />);
 
   return (
-    <Screen>
-      {todos.length === 0 && (
-        <EmptyCard>아직 할 일이 없어요. 새 할 일을 추가해보세요!</EmptyCard>
-      )}
+    <>
+      <Screen>
+        {todos.length === 0 && (
+          <EmptyCard>아직 할 일이 없어요. 새 할 일을 추가해보세요!</EmptyCard>
+        )}
 
-      {incomplete.length > 0 && (
-        <Section title="진행 중" count={incomplete.length}>{rows(incomplete)}</Section>
-      )}
+        {incomplete.length > 0 && (
+          <Section title="진행 중" count={incomplete.length}>{rows(incomplete)}</Section>
+        )}
 
-      {completed.length > 0 && (
-        <Section title="완료" count={completed.length} muted>{rows(completed)}</Section>
-      )}
+        {completed.length > 0 && (
+          <Section title="완료" count={completed.length} muted>{rows(completed)}</Section>
+        )}
 
-      {archived.length > 0 && (
-        <CollapsibleSection
-          title="보관됨"
-          count={archived.length}
-          open={showArchived}
-          onToggle={() => setShowArchived(o => !o)}
-        >
-          {rows(archived)}
-        </CollapsibleSection>
-      )}
-    </Screen>
+        {archived.length > 0 && (
+          <CollapsibleSection
+            title="보관됨"
+            count={archived.length}
+            open={showArchived}
+            onToggle={() => setShowArchived(o => !o)}
+          >
+            {rows(archived)}
+          </CollapsibleSection>
+        )}
+      </Screen>
+
+      <Fab onPress={form.openCreate} />
+      {form.sheet}
+    </>
   );
 }

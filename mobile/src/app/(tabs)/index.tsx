@@ -4,15 +4,17 @@ import { StyleSheet, Text, View } from 'react-native';
 import { daysDiff } from '@shared/dates.js';
 import { STAGE_LABELS, progressLevel } from '@shared/labels.js';
 import { Chip } from '@/components/chip';
+import { Fab } from '@/components/fab';
 import { Dot } from '@/components/indicators';
 import { MoreMenu } from '@/components/more-menu';
 import { PillButton } from '@/components/pill-button';
 import { Screen } from '@/components/screen';
 import { Empty, GroupLabel, Section } from '@/components/section';
+import { useTodoFormSheet } from '@/components/todo-form-sheet';
 import type { Todo } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useReportedMutate, useTodos } from '@/lib/todos-context';
-import { colors, fontSize, progressColors, progressTrack } from '@/constants/tokens';
+import { colors, fontFamily, fontSize, progressColors, progressTrack } from '@/constants/tokens';
 
 /**
  * 오늘 화면 — 수행날짜가 오늘인 항목과 오늘이 복습일인 항목.
@@ -29,6 +31,7 @@ export default function TodayScreen() {
   const { todos, today } = useTodos();
   const { api } = useAuth();
   const run = useReportedMutate();
+  const form = useTodoFormSheet();
 
   const { perform, reviews } = useMemo(() => ({
     perform: todos.filter(t => !t.completed && t.perform_date === today),
@@ -38,8 +41,9 @@ export default function TodayScreen() {
   const total = perform.length + reviews.length;
 
   return (
-    <Screen>
-      <Section title="오늘 할 일" count={total}>
+    <>
+      <Screen>
+        <Section title="오늘 할 일" count={total}>
         {total === 0 && <Empty>오늘 할 일이 없습니다</Empty>}
 
         {perform.length > 0 && (
@@ -72,8 +76,12 @@ export default function TodayScreen() {
             ))}
           </View>
         )}
-      </Section>
-    </Screen>
+        </Section>
+      </Screen>
+
+      <Fab onPress={form.openCreate} />
+      {form.sheet}
+    </>
   );
 }
 
@@ -167,17 +175,17 @@ const styles = StyleSheet.create({
   divided: { borderTopWidth: 1, borderTopColor: colors.lineSoft },
 
   body: { flex: 1, gap: 4 },
-  title: { fontSize: fontSize.title, fontWeight: '600', letterSpacing: -0.1, color: colors.text },
+  title: { fontFamily: fontFamily.body, fontSize: fontSize.title, fontWeight: '600', letterSpacing: -0.1, color: colors.text },
 
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5 },
-  sub: { fontSize: fontSize.meta, color: colors.muted },
+  sub: { fontFamily: fontFamily.body, fontSize: fontSize.meta, color: colors.muted },
   danger: { color: colors.danger },
   warn: { color: colors.warn },
 
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   barTrack: { flex: 1, height: 6, borderRadius: 99, backgroundColor: progressTrack, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 99 },
-  pct: { fontSize: 12, fontWeight: '700', minWidth: 34, textAlign: 'right' },
+  pct: { fontFamily: fontFamily.body, fontSize: 12, fontWeight: '700', minWidth: 34, textAlign: 'right' },
 
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 });

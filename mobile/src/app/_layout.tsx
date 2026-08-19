@@ -1,3 +1,4 @@
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
@@ -24,9 +25,19 @@ import { colors } from '@/constants/tokens';
 function RootNavigator() {
   const { session, restoring } = useAuth();
 
+  // 제목에 쓰는 명조. 한글 명조는 어느 기기에도 기본으로 없어서 직접 들여야 한다
+  // (웹도 같은 이유로 Google Fonts에서 받아온다).
+  // 다 받기 전에 그리면 고딕으로 한 번 그려졌다가 바뀌어 화면이 튄다.
+  // 실패하면 그대로 진행한다 — 글꼴 하나 때문에 앱이 안 열려서는 안 된다.
+  // 패키지 **뿌리에서** 가져오면 안 쓰는 굵기 둘까지 함께 담긴다(한글 글꼴이라 하나에 3MB씩,
+  // 셋이면 8.9MB다). 쓰는 파일 하나만 직접 가리킨다.
+  const [fontsLoaded, fontError] = useFonts({
+    NanumMyeongjo_800ExtraBold: require('@expo-google-fonts/nanum-myeongjo/800ExtraBold/NanumMyeongjo_800ExtraBold.ttf'),
+  });
+
   // 저장된 세션을 읽는 사이에 로그인 화면을 보여주면, 이미 로그인한 사람에게도
   // 화면이 한 번 번쩍인다. 짧은 순간이라도 기다린다.
-  if (restoring) {
+  if (restoring || (!fontsLoaded && !fontError)) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator color={colors.accent} />

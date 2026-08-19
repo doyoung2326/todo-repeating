@@ -43,6 +43,24 @@ export type Category = {
   created_at: string;
 };
 
+/**
+ * 할 일을 만들거나 고칠 때 보내는 몸통.
+ *
+ * **키가 빠진 것과 null인 것의 뜻이 다르다** — 빠지면 서버가 그 값을 건드리지 않고,
+ * null이면 지운다. 폼이 성격 목록을 모를 때 `category_id`를 아예 빼는 것이 이 성질을 쓴다.
+ */
+export type TodoInput = {
+  text?: string;
+  importance?: 1 | 2 | 3;
+  category_id?: string | null;
+  deadline?: string | null;
+  perform_date?: string | null;
+  needs_review?: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+  progress?: number;
+};
+
 export type Api = ReturnType<typeof createApi>;
 
 /**
@@ -72,8 +90,8 @@ export function createApi({ token, onUnauthorized }: {
 
   return {
     listTodos: () => call<Todo[]>('/todos'),
-    createTodo: (data: Partial<Todo>) => call<Todo>('/todos', { method: 'POST', body: body(data) }),
-    updateTodo: (id: string, data: Partial<Todo>) => call<Todo>(`/todos/${id}`, { method: 'PUT', body: body(data) }),
+    createTodo: (data: TodoInput) => call<Todo>('/todos', { method: 'POST', body: body(data) }),
+    updateTodo: (id: string, data: TodoInput) => call<Todo>(`/todos/${id}`, { method: 'PUT', body: body(data) }),
     deleteTodo: (id: string) => call<unknown>(`/todos/${id}`, { method: 'DELETE' }),
     completeTodo: (id: string, completed: boolean) =>
       call<Todo>(`/todos/${id}/complete`, { method: 'PUT', body: body({ completed }) }),

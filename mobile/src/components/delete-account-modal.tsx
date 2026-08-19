@@ -4,7 +4,7 @@ import {
   Pressable, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
-import { colors, radius, TAP, INPUT_FONT_SIZE } from '@/constants/tokens';
+import { colors, fontFamily, INPUT_FONT_SIZE, radius, TAP } from '@/constants/tokens';
 
 /**
  * 회원 탈퇴 확인 창.
@@ -124,16 +124,17 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 10,
   },
-  title: { fontSize: 18, fontWeight: '700', color: colors.text },
-  desc: { fontSize: 14, color: colors.muted, lineHeight: 21 },
+  title: { fontFamily: fontFamily.display, fontSize: 18, color: colors.text },
+  desc: { fontFamily: fontFamily.body, fontSize: 14, color: colors.muted, lineHeight: 21 },
   error: {
     padding: 10,
     borderRadius: radius.sm,
     backgroundColor: colors.dangerSoft,
     color: colors.danger,
     fontSize: 13,
+    fontFamily: fontFamily.body,
   },
-  label: { fontSize: 13, fontWeight: '600', color: colors.muted, marginTop: 4 },
+  label: { fontFamily: fontFamily.body, fontSize: 13, fontWeight: '600', color: colors.muted, marginTop: 4 },
   input: {
     minHeight: TAP,
     paddingHorizontal: 12,
@@ -143,6 +144,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     color: colors.text,
     fontSize: INPUT_FONT_SIZE,   // 16px 미만이면 iOS가 누를 때 화면을 확대한다
+    fontFamily: fontFamily.body,
   },
   actions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   btn: {
@@ -154,7 +156,7 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.6 },
   btnGhost: { borderWidth: 1, borderColor: colors.line },
-  btnGhostText: { fontSize: 15, fontWeight: '600', color: colors.muted },
+  btnGhostText: { fontFamily: fontFamily.body, fontSize: 15, fontWeight: '600', color: colors.muted },
   btnDanger: { backgroundColor: colors.danger },
-  btnDangerText: { fontSize: 15, fontWeight: '600', color: colors.onAccent },
+  btnDangerText: { fontFamily: fontFamily.body, fontSize: 15, fontWeight: '600', color: colors.onAccent },
 });

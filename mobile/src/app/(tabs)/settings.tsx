@@ -5,9 +5,10 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { ConfirmModal } from '@/components/confirm-modal';
 import { DeleteAccountModal } from '@/components/delete-account-modal';
+import { useTabBarSpace } from '@/components/tab-bar';
 import { useAuth } from '@/lib/auth-context';
 import { PRIVACY_URL } from '@/constants/links';
-import { colors, radius, TAP } from '@/constants/tokens';
+import { colors, fontFamily, radius, TAP } from '@/constants/tokens';
 
 /**
  * 설정 — 계정에 관한 것만 모여 있다.
@@ -20,6 +21,7 @@ export default function SettingsScreen() {
   const { session, api, signOut } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const tabBar = useTabBarSpace();
 
   // 서버가 계정을 지우고 나면 남은 토큰은 이미 죽어 있다. 이 기기의 세션만 지우면 된다.
   // 오류는 잡지 않고 그대로 던진다 — 창이 받아서 그 안에 보여준다.
@@ -34,7 +36,7 @@ export default function SettingsScreen() {
         <Text style={styles.title}>설정</Text>
       </View>
 
-      <View style={styles.body}>
+      <View style={[styles.body, { paddingBottom: tabBar.total }]}>
         <View style={styles.group}>
           <Text style={styles.groupLabel}>계정</Text>
           <View style={styles.card}>
@@ -94,11 +96,11 @@ function Row({ label, onPress, tone = 'normal' }: {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text },
+  title: { fontFamily: fontFamily.body, fontSize: 20, fontWeight: '700', color: colors.text },
   body: { paddingHorizontal: 16, gap: 20 },
 
   group: { gap: 6 },
-  groupLabel: { fontSize: 12, fontWeight: '600', color: colors.muted, paddingHorizontal: 2 },
+  groupLabel: { fontFamily: fontFamily.body, fontSize: 12, fontWeight: '600', color: colors.muted, paddingHorizontal: 2 },
 
   card: {
     minHeight: TAP,
@@ -109,7 +111,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.card,
   },
-  email: { fontSize: 15, color: colors.text },
+  email: { fontFamily: fontFamily.body, fontSize: 15, color: colors.text },
 
   row: {
     minHeight: TAP,
@@ -121,8 +123,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   rowPressed: { opacity: 0.6 },
-  rowText: { fontSize: 15, color: colors.text },
+  rowText: { fontFamily: fontFamily.body, fontSize: 15, color: colors.text },
   rowTextDanger: { color: colors.danger, fontWeight: '600' },
 
-  note: { fontSize: 12, color: colors.muted, lineHeight: 18, paddingHorizontal: 2 },
+  note: { fontFamily: fontFamily.body, fontSize: 12, color: colors.muted, lineHeight: 18, paddingHorizontal: 2 },
 });

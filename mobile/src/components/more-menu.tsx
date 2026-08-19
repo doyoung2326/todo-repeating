@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontSize, radius, TAP } from '@/constants/tokens';
+import { colors, fontFamily, fontSize, radius, TAP } from '@/constants/tokens';
 
 /**
  * 항목 오른쪽의 ⋯ 메뉴. 좁은 화면에서 아이콘 버튼 여러 개 대신 쓴다 —
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   triggerPressed: { backgroundColor: colors.lineSoft },
-  triggerText: { fontSize: 19, letterSpacing: 1.5, color: colors.muted, lineHeight: 22 },
+  triggerText: { fontFamily: fontFamily.body, fontSize: 19, letterSpacing: 1.5, color: colors.muted, lineHeight: 22 },
 
   menu: {
     position: 'absolute',
@@ -103,6 +103,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   itemPressed: { backgroundColor: colors.lineSoft },
-  itemText: { fontSize: fontSize.title - 1, color: colors.text },
+  itemText: { fontFamily: fontFamily.body, fontSize: fontSize.title - 1, color: colors.text },
   itemTextDanger: { color: colors.danger, fontWeight: '600' },
 });

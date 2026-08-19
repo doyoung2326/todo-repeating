@@ -9,7 +9,7 @@ import { PillButton } from './pill-button';
 import type { Review, Todo } from '@/lib/api';
 import { useTodos } from '@/lib/todos-context';
 import {
-  categoryColors, colors, fontSize, importanceChip, progressColors, progressTrack,
+  categoryColors, colors, fontFamily, fontSize, importanceChip, progressColors, progressTrack,
 } from '@/constants/tokens';
 
 type Tagged = { label: string; tone: ChipTone };
@@ -171,6 +171,7 @@ const styles = StyleSheet.create({
 
   text: {
     fontSize: fontSize.title,
+    fontFamily: fontFamily.body,
     fontWeight: '600',
     letterSpacing: -0.1,
     color: colors.text,

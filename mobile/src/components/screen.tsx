@@ -3,8 +3,9 @@ import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View }
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { formatKoreanDate } from '@shared/dates.js';
+import { useTabBarSpace } from './tab-bar';
 import { useTodos } from '@/lib/todos-context';
-import { colors, fontSize, radius } from '@/constants/tokens';
+import { colors, fontFamily, fontSize, radius } from '@/constants/tokens';
 
 /**
  * 할 일을 보는 세 탭이 공유하는 껍데기 — 날짜 머리글, 오류 띠, 당겨서 새로고침, 첫 로딩 표시.
@@ -20,6 +21,8 @@ import { colors, fontSize, radius } from '@/constants/tokens';
 export function Screen({ children }: { children: ReactNode }) {
   const { loading, error, notice, refresh, today } = useTodos();
   const [refreshing, setRefreshing] = useState(false);
+  // 탭바가 떠 있어 목록 위를 덮는다. 그만큼 비우지 않으면 마지막 항목이 가린다.
+  const tabBar = useTabBarSpace();
 
   async function pull() {
     setRefreshing(true);
@@ -40,7 +43,7 @@ export function Screen({ children }: { children: ReactNode }) {
       {notice && <Text style={styles.error}>{notice}</Text>}
 
       <ScrollView
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[styles.body, { paddingBottom: tabBar.total + 16 }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.accent} />
         }
@@ -55,7 +58,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
 
   header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8 },
-  date: { fontSize: fontSize.meta, fontWeight: '600', color: colors.muted, letterSpacing: 0.2 },
+  date: { fontFamily: fontFamily.body, fontSize: fontSize.meta, fontWeight: '600', color: colors.muted, letterSpacing: 0.2 },
 
   error: {
     marginHorizontal: 16,
@@ -65,8 +68,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSoft,
     color: colors.danger,
     fontSize: 13,
+    fontFamily: fontFamily.body,
   },
 
-  body: { paddingHorizontal: 16, paddingBottom: 32, gap: 12 },
+  body: { paddingHorizontal: 16, gap: 12 },
   loading: { marginTop: 32 },
 });

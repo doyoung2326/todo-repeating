@@ -9,7 +9,7 @@ import { Screen } from '@/components/screen';
 import { Empty, GroupLabel, Section } from '@/components/section';
 import { useAuth } from '@/lib/auth-context';
 import { useReportedMutate, useTodos } from '@/lib/todos-context';
-import { colors, fontSize } from '@/constants/tokens';
+import { colors, fontFamily, fontSize } from '@/constants/tokens';
 
 type Item = {
   id: string;
@@ -112,8 +112,8 @@ const styles = StyleSheet.create({
   divided: { borderTopWidth: 1, borderTopColor: colors.lineSoft },
 
   body: { flex: 1, gap: 4 },
-  text: { fontSize: fontSize.title, fontWeight: '600', letterSpacing: -0.1, color: colors.text },
+  text: { fontFamily: fontFamily.body, fontSize: fontSize.title, fontWeight: '600', letterSpacing: -0.1, color: colors.text },
 
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  meta: { fontSize: fontSize.meta, color: colors.muted },
+  meta: { fontFamily: fontFamily.body, fontSize: fontSize.meta, color: colors.muted },
 });

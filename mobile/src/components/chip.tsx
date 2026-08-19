@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontSize, importanceChip } from '@/constants/tokens';
+import { colors, fontFamily, fontSize, importanceChip } from '@/constants/tokens';
 
 /**
  * 마감·시간·상태를 나르는 알약 칩. 웹 App.css의 `.dl-tag / .time-tag / .review-tag`
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 99,
   },
-  label: { fontSize: fontSize.chip, fontWeight: '600' },
+  label: { fontFamily: fontFamily.body, fontSize: fontSize.chip, fontWeight: '600' },
 
   chipBtn: {
     paddingVertical: 1,
@@ -76,5 +76,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.65)',
   },
   pressed: { backgroundColor: 'rgba(255,255,255,0.95)' },
-  chipBtnText: { fontSize: 11, fontWeight: '700' },
+  chipBtnText: { fontFamily: fontFamily.body, fontSize: 11, fontWeight: '700' },
 });

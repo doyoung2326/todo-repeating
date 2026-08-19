@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 
-import { colors, fontSize, radius, TAP } from '@/constants/tokens';
+import { colors, fontFamily, fontSize, radius, TAP } from '@/constants/tokens';
 
 /**
  * 묶음 하나를 담는 카드. 웹의 `.card.section-card` + `.section-title` + `.count-sm`이다.
@@ -98,7 +98,8 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  title: { fontSize: 16, fontWeight: '800', letterSpacing: -0.1, color: colors.text },
+  // 웹 .section-title과 같은 명조. 글꼴 자체가 800이라 fontWeight를 따로 주지 않는다.
+  title: { fontFamily: fontFamily.display, fontSize: 16.3, letterSpacing: -0.1, color: colors.text },
   titleMuted: { color: colors.muted },
 
   toggle: { minHeight: TAP, marginVertical: -10 },
@@ -110,13 +111,13 @@ const styles = StyleSheet.create({
     borderRadius: 99,
     backgroundColor: colors.accentSoft,
   },
-  countText: { fontSize: 12, fontWeight: '700', color: colors.accent },
+  countText: { fontFamily: fontFamily.body, fontSize: 12, fontWeight: '700', color: colors.accent },
 
-  groupLabel: { fontSize: 12.5, fontWeight: '700', letterSpacing: 0.2 },
+  groupLabel: { fontFamily: fontFamily.body, fontSize: 12.5, fontWeight: '700', letterSpacing: 0.2 },
   muted: { color: colors.muted },
   accent: { color: colors.accent },
   warn: { color: colors.warn },
   danger: { color: colors.danger },
 
-  empty: { color: colors.muted, fontSize: 14, textAlign: 'center', paddingVertical: 22 },
+  empty: { fontFamily: fontFamily.body, color: colors.muted, fontSize: 14, textAlign: 'center', paddingVertical: 22 },
 });

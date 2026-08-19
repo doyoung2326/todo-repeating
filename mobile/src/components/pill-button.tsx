@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors } from '@/constants/tokens';
+import { colors, fontFamily, WEIGHT_SEMI } from '@/constants/tokens';
 
 /**
  * 알약 버튼. 웹 `.pill-btn.sm`과 같은 모양이다 — 테두리만 있는 강조색 버튼이고,
@@ -34,5 +34,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   pressed: { backgroundColor: colors.accentSoft },
-  text: { fontSize: 12.5, fontWeight: '600', color: colors.accent },
+  text: { fontFamily: fontFamily.body, fontSize: 12.5, fontWeight: WEIGHT_SEMI, color: colors.accent },
 });

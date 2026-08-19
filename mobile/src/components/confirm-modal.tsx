@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radius, TAP } from '@/constants/tokens';
+import { colors, fontFamily, radius, TAP } from '@/constants/tokens';
 
 /**
  * 예·아니오만 묻는 확인 창.
@@ -85,8 +85,8 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 10,
   },
-  title: { fontSize: 18, fontWeight: '700', color: colors.text },
-  desc: { fontSize: 14, color: colors.muted, lineHeight: 21 },
+  title: { fontFamily: fontFamily.display, fontSize: 18, color: colors.text },
+  desc: { fontFamily: fontFamily.body, fontSize: 14, color: colors.muted, lineHeight: 21 },
 
   actions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   btn: {
@@ -98,8 +98,8 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.6 },
   btnGhost: { borderWidth: 1, borderColor: colors.line },
-  btnGhostText: { fontSize: 15, fontWeight: '600', color: colors.muted },
+  btnGhostText: { fontFamily: fontFamily.body, fontSize: 15, fontWeight: '600', color: colors.muted },
   btnAccent: { backgroundColor: colors.accent },
   btnDanger: { backgroundColor: colors.danger },
-  btnFilledText: { fontSize: 15, fontWeight: '600', color: colors.onAccent },
+  btnFilledText: { fontFamily: fontFamily.body, fontSize: 15, fontWeight: '600', color: colors.onAccent },
 });

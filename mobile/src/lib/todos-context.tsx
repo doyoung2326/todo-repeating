@@ -6,6 +6,11 @@ import { useAuth } from './auth-context';
 
 type TodosValue = {
   todos: Todo[];
+  /**
+   * 성격 목록. **배열이면 "이것이 전부", null이면 "아직 모른다"**이고 둘을 뭉뚱그리면 안 된다 —
+   * 못 받아온 것을 "없다"로 읽으면 폼이 멀쩡한 성격을 지운다(웹 TodoForm과 같은 약속).
+   */
+  categories: Category[] | null;
   /** 성격을 id로 찾는 표. 할 일에는 `category_id`만 들어 있다. */
   categoryById: Map<string, Category>;
   today: string;
@@ -32,7 +37,8 @@ const TodosContext = createContext<TodosValue | null>(null);
 export function TodosProvider({ children }: { children: ReactNode }) {
   const { api, session } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  // null은 '아직 못 받아왔다'. []는 '정말 하나도 없다'. 폼이 이 둘을 다르게 다룬다.
+  const [categories, setCategories] = useState<Category[] | null>(null);
   const [today, setToday] = useState(localToday);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +79,7 @@ export function TodosProvider({ children }: { children: ReactNode }) {
     // 앞 사용자의 것도 함께 비운다 — 남겨 두면 다음 사람이 잠깐 남의 할 일을 본다.
     if (!account) {
       setTodos([]);
-      setCategories([]);
+      setCategories(null);
       setError(null);
       setNotice(null);
       setLoading(false);
@@ -118,13 +124,13 @@ export function TodosProvider({ children }: { children: ReactNode }) {
   const notify = useCallback((message: string) => setNotice(message), []);
 
   const categoryById = useMemo(
-    () => new Map(categories.map(c => [String(c.id), c])),
+    () => new Map((categories ?? []).map(c => [String(c.id), c])),
     [categories]
   );
 
   const value = useMemo(
-    () => ({ todos, categoryById, today, loading, error, notice, notify, refresh, mutate }),
-    [todos, categoryById, today, loading, error, notice, notify, refresh, mutate]
+    () => ({ todos, categories, categoryById, today, loading, error, notice, notify, refresh, mutate }),
+    [todos, categories, categoryById, today, loading, error, notice, notify, refresh, mutate]
   );
 
   return <TodosContext.Provider value={value}>{children}</TodosContext.Provider>;
