@@ -12,8 +12,8 @@ export const colors = {
   card: '#fbfbf9',
   text: '#2b322d',
   muted: '#78807a',
-  line: '#e0e4dd',
-  lineSoft: '#eaeee7',
+  line: '#e0e4dd',      // 카드 테두리
+  lineSoft: '#eaeee7',  // 항목 사이 구분선
 
   accent: '#4d6b57',
   accentSoft: '#e4ebe5',
@@ -25,11 +25,35 @@ export const colors = {
   warnSoft: '#f3ecdd',
 } as const;
 
-/** 중요도 1·2·3 — 한 색의 세 농도. 빨강·주황·파랑이 아니다. */
+/** 중요도 1·2·3 — 한 색의 세 농도. 빨강·주황·파랑이 아니다. 점에 쓴다. */
 export const importanceColors = {
   1: '#c3cec5',
   2: '#9aa89f',
   3: '#4d6b57',
+} as const;
+
+/** 같은 중요도를 칩으로 그릴 때의 바탕·글자 (웹의 --imp-N-bg / --imp-N-fg). */
+export const importanceChip = {
+  1: { bg: '#eef0ec', fg: '#78807a' },
+  2: { bg: '#e7ece7', fg: '#5f7566' },
+  3: { bg: '#dbe6dd', fg: '#3a5442' },
+} as const;
+
+/**
+ * 할 일 성격 — 사용자가 고르는 8칸.
+ * 서버에는 칸 번호(1~8)만 저장하고 실제 색은 여기서만 정한다.
+ * 채도는 danger·warn과 같은 대역으로 눌러 둔다 — 여기만 쨍하면
+ * "강조는 accent 한 색뿐"이라는 화면 전체의 약속이 무너진다.
+ */
+export const categoryColors = {
+  1: { solid: '#657051', bg: '#e7ebe0', fg: '#4c5738' },
+  2: { solid: '#456668', bg: '#e0eaeb', fg: '#325052' },
+  3: { solid: '#516885', bg: '#e3e7ee', fg: '#35455a' },
+  4: { solid: '#746487', bg: '#e8e3ed', fg: '#4c3f5a' },
+  5: { solid: '#856073', bg: '#ede3e8', fg: '#573d4a' },
+  6: { solid: '#915b55', bg: '#eee3e2', fg: '#5d3b37' },
+  7: { solid: '#816b4b', bg: '#ede7de', fg: '#584932' },
+  8: { solid: '#746b63', bg: '#e9e5e2', fg: '#514943' },
 } as const;
 
 /** 진행률 단계 — shared/labels.js의 progressLevel이 고른 단계에 색을 붙인다. */
@@ -39,7 +63,20 @@ export const progressColors = {
   high: '#4d6b57',
 } as const;
 
+/** 진행률 막대의 바탕. 웹 .progress-bar-container의 배경과 같은 값이다. */
+export const progressTrack = '#e7eae5';
+
 export const radius = { md: 14, sm: 10 } as const;
+
+/**
+ * 글자 크기. 웹의 --fs-* 를 px로 옮긴 것이다(웹 기준 1rem = 16px).
+ * 웹에는 --type-scale 배율이 있지만 앱에는 화면 조정 패널이 없어 고정값이다.
+ */
+export const fontSize = {
+  title: 16,  // --fs-title
+  meta: 13,   // --fs-meta  (.8125rem)
+  chip: 12,   // --fs-chip  (.75rem)
+} as const;
 
 /** 누르는 것의 최소 크기. 웹의 `--tap`과 같은 약속이다. */
 export const TAP = 44;

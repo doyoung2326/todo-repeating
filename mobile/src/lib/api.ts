@@ -4,19 +4,27 @@ import { API_URL } from './config';
 
 export { SessionExpiredError };
 
-/** 서버가 주는 할 일. backend/app.js의 Todo 모델과 맞춰 둔다. */
+/**
+ * 서버가 주는 할 일. backend/app.js의 `formatTodo`와 맞춰 둔다.
+ *
+ * `completed`·`needs_review`는 **0/1인 숫자다**(스키마가 Number다). boolean으로 적어 두면
+ * `=== true` 같은 비교가 조용히 늘 거짓이 된다. 참·거짓으로 쓸 때는 `!!`로 바꾼다.
+ */
 export type Todo = {
   id: string;
   text: string;
   importance: 1 | 2 | 3;
-  category: number | null;
-  completed: boolean;
-  needs_review: boolean;
+  /** 성격(카테고리) 문서의 id. 웹과 같은 이름이다 — 예전에 `category`로 적혀 있어 칩이 안 그려졌다. */
+  category_id: string | null;
+  completed: number;
+  needs_review: number;
   deadline: string | null;
   perform_date: string | null;
   start_time: string | null;
   end_time: string | null;
   progress: number | null;
+  completed_at: string | null;
+  created_at: string;
   activeReview: Review | null;
 };
 
@@ -25,6 +33,14 @@ export type Review = {
   stage: number;
   due_date: string;
   completed: boolean;
+};
+
+/** 할 일의 성격. `color`는 색값이 아니라 **칸 번호(1~8)**다 — 실제 색은 화면이 정한다. */
+export type Category = {
+  id: string;
+  name: string;
+  color: number;
+  created_at: string;
 };
 
 export type Api = ReturnType<typeof createApi>;
@@ -66,6 +82,9 @@ export function createApi({ token, onUnauthorized }: {
     setPerformDate: (id: string, perform_date: string | null) =>
       call<Todo>(`/todos/${id}/perform-date`, { method: 'PUT', body: body({ perform_date }) }),
     completeReview: (id: string) => call<unknown>(`/reviews/${id}/complete`, { method: 'PUT' }),
+
+    /** 성격 목록. 할 일보다 훨씬 드물게 바뀌므로 화면은 한 번 받아 두고 쓴다. */
+    listCategories: () => call<Category[]>('/categories'),
 
     /**
      * 회원 탈퇴. 계정과 할 일·복습·알림 구독이 그 자리에서 전부 지워진다.

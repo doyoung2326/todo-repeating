@@ -1,30 +1,36 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { formatKoreanDate } from '@shared/dates.js';
 import { useTodos } from '@/lib/todos-context';
-import { colors, radius } from '@/constants/tokens';
+import { colors, fontSize, radius } from '@/constants/tokens';
 
 /**
- * 세 탭이 공유하는 껍데기 — 제목줄, 당겨서 새로고침, 오류 띠, 첫 로딩 표시.
+ * 할 일을 보는 세 탭이 공유하는 껍데기 — 날짜 머리글, 오류 띠, 당겨서 새로고침, 첫 로딩 표시.
+ *
+ * **제목은 여기에 두지 않는다.** 웹처럼 묶음마다 카드가 제 제목을 들고 있어서
+ * (`Section`), 화면 위에도 같은 말을 적으면 두 번 읽힌다.
+ * 대신 웹 헤더의 날짜(`.app-date`)를 남긴다 — 마감·복습이 전부 "오늘"을 기준으로
+ * 읽히는 화면이라, 그 오늘이 언제인지 보이는 편이 낫다.
  *
  * 목록 자체는 ScrollView다. 항목이 수백 개가 되면 FlatList로 바꿔야 하지만,
  * 지금 규모에서 미리 나누면 화면 코드만 복잡해진다.
  */
-export function Screen({ title, count, children }: {
-  title: string;
-  count?: number;
-  children: ReactNode;
-}) {
-  const { loading, error, notice, reload } = useTodos();
+export function Screen({ children }: { children: ReactNode }) {
+  const { loading, error, notice, refresh, today } = useTodos();
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function pull() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>{title}</Text>
-        {count !== undefined && count > 0 && (
-          <View style={styles.badge}><Text style={styles.badgeText}>{count}</Text></View>
-        )}
+        <Text style={styles.date}>{formatKoreanDate(today)}</Text>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -35,7 +41,9 @@ export function Screen({ title, count, children }: {
 
       <ScrollView
         contentContainerStyle={styles.body}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={reload} tintColor={colors.accent} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.accent} />
+        }
       >
         {loading ? <ActivityIndicator color={colors.accent} style={styles.loading} /> : children}
       </ScrollView>
@@ -43,24 +51,22 @@ export function Screen({ title, count, children }: {
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <Text style={styles.empty}>{children}</Text>;
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text },
-  badge: {
-    minWidth: 22, paddingHorizontal: 7, paddingVertical: 2,
-    borderRadius: 11, backgroundColor: colors.accentSoft, alignItems: 'center',
-  },
-  badgeText: { fontSize: 12, fontWeight: '600', color: colors.accent },
+
+  header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8 },
+  date: { fontSize: fontSize.meta, fontWeight: '600', color: colors.muted, letterSpacing: 0.2 },
+
   error: {
-    marginHorizontal: 16, marginBottom: 8, padding: 10,
-    borderRadius: radius.sm, backgroundColor: colors.dangerSoft, color: colors.danger, fontSize: 13,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.dangerSoft,
+    color: colors.danger,
+    fontSize: 13,
   },
-  body: { paddingHorizontal: 16, paddingBottom: 32, gap: 10 },
+
+  body: { paddingHorizontal: 16, paddingBottom: 32, gap: 12 },
   loading: { marginTop: 32 },
-  empty: { color: colors.muted, fontSize: 14, textAlign: 'center', marginTop: 40 },
 });
