@@ -11,6 +11,7 @@ const {
   signToken, verifyToken, extractBearerToken,
 } = require('./lib/auth');
 const { validateSubscription, toWebPushSubscription } = require('./lib/push');
+const { validateCategory, MAX_CATEGORIES } = require('./lib/categories');
 const webpush = require('./lib/webpush');
 
 const INTERVALS = [1, 3, 7, 16, 30];
@@ -46,6 +47,7 @@ const todoSchema = new mongoose.Schema({
   userId:       { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   text:         { type: String, required: true },
   importance:   { type: Number, default: 1 },
+  category_id:  { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null },
   deadline:     { type: String, default: null },
   perform_date: { type: String, default: null },
   needs_review: { type: Number, default: 0 },
@@ -56,6 +58,20 @@ const todoSchema = new mongoose.Schema({
   completed_at: { type: String, default: null },
   created_at:   { type: String },
 });
+
+// 사용자가 직접 만드는 할 일의 성격("영어", "과제"…). 색은 색값이 아니라 칸 번호다 —
+// 실제 색은 화면에만 있어서(웹 App.css의 --cat-N, 앱 tokens.ts) 색을 다시 맞춰도
+// 이미 저장된 성격이 그대로 따라온다.
+const categorySchema = new mongoose.Schema({
+  userId:     { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  name:       { type: String, required: true },
+  color:      { type: Number, required: true },
+  created_at: { type: String },
+});
+
+// 칩에는 이름만 나오므로 같은 이름 둘은 화면에서 구분할 수 없다.
+// userId가 인덱스 안에 있으니 다른 사용자는 같은 이름을 써도 된다.
+categorySchema.index({ userId: 1, name: 1 }, { unique: true });
 
 const reviewSchema = new mongoose.Schema({
   userId:       { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -89,6 +105,7 @@ const model = (name, schema) => mongoose.models[name] || mongoose.model(name, sc
 const User   = model('User', userSchema);
 const Todo   = model('Todo', todoSchema);
 const Review = model('Review', reviewSchema);
+const Category = model('Category', categorySchema);
 const PushSubscription = model('PushSubscription', pushSubscriptionSchema);
 
 // ── 유틸 ──────────────────────────────────────────
@@ -101,6 +118,7 @@ function formatTodo(t, activeReview) {
     id:           t._id,
     text:         t.text,
     importance:   t.importance,
+    category_id:  t.category_id,
     deadline:     t.deadline,
     perform_date: t.perform_date,
     needs_review: t.needs_review,
@@ -113,6 +131,10 @@ function formatTodo(t, activeReview) {
     activeReview: activeReview || null,
   };
 }
+
+const formatCategory = c => ({
+  id: c._id, name: c.name, color: c.color, created_at: c.created_at,
+});
 
 async function getActiveReview(todoId, userId) {
   const reviews = await Review.find({ todoId, userId, completed: 0 }).sort({ stage: 1 });
@@ -144,6 +166,27 @@ async function markCompleted(todo) {
 /** 요청한 사용자가 가진 할일만 찾는다. 남의 할일은 존재하지 않는 것처럼 취급한다. */
 function findOwnTodo(req) {
   return Todo.findOne({ _id: req.params.id, userId: req.userId });
+}
+
+const UNKNOWN_CATEGORY = { error: '알 수 없는 성격입니다.' };
+
+/**
+ * 할 일에 붙일 성격 id를 확인한다. 빈 값이면 null(성격 없음), 쓸 수 없는 값이면 undefined.
+ *
+ * 남의 성격도 undefined다. 막지 않으면 B가 A의 성격 id를 자기 할 일에 영구히 박을 수 있고,
+ * A가 그 성격을 지워도 정리(updateMany)는 A의 할 일만 훑으므로 그대로 남는다.
+ *
+ * 없는 성격·남의 성격·형식이 틀린 값에 **모두 같은 답**을 준다 — 그래야 남의 것이
+ * 있는지 없는지가 새어 나가지 않는다.
+ */
+async function resolveCategoryId(value, userId) {
+  if (value === null || value === undefined || value === '') return null;
+  // 이 검사가 없으면 mongoose가 CastError를 던지고, 전역 처리기가 그걸 404로 바꿔
+  // 다른 경로와 답이 어긋난다.
+  if (!mongoose.Types.ObjectId.isValid(value)) return undefined;
+
+  const found = await Category.findOne({ _id: value, userId }).select('_id');
+  return found ? found._id : undefined;
 }
 
 // ── 인증 ──────────────────────────────────────────
@@ -273,6 +316,7 @@ app.delete('/api/auth/me', requireAuth, wrap(async (req, res) => {
 // 여기부터 아래 모든 라우트는 로그인이 필요하다.
 app.use('/api/todos', requireAuth);
 app.use('/api/reviews', requireAuth);
+app.use('/api/categories', requireAuth);
 app.use('/api/push', requireAuth);
 
 // ── GET 전체 할일 ──────────────────────────────────
@@ -284,12 +328,16 @@ app.get('/api/todos', wrap(async (req, res) => {
 
 // ── POST 할일 추가 ─────────────────────────────────
 app.post('/api/todos', wrap(async (req, res) => {
-  const { text, importance=1, deadline, perform_date, needs_review=false, start_time, end_time } = req.body;
+  const { text, importance=1, category_id, deadline, perform_date, needs_review=false, start_time, end_time } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
+
+  const categoryId = await resolveCategoryId(category_id, req.userId);
+  if (categoryId === undefined) return res.status(400).json(UNKNOWN_CATEGORY);
 
   const todo = await Todo.create({
     userId: req.userId,
     text: text.trim(), importance: Number(importance),
+    category_id: categoryId,
     deadline: deadline||null, perform_date: perform_date||null,
     needs_review: needs_review ? 1 : 0,
     start_time: start_time||null, end_time: end_time||null,
@@ -300,7 +348,7 @@ app.post('/api/todos', wrap(async (req, res) => {
 
 // ── PUT 할일 수정 ──────────────────────────────────
 app.put('/api/todos/:id', wrap(async (req, res) => {
-  const { text, importance, deadline, perform_date, needs_review, progress, start_time, end_time } = req.body;
+  const { text, importance, category_id, deadline, perform_date, needs_review, progress, start_time, end_time } = req.body;
   const todo = await findOwnTodo(req);
   if (!todo) return res.status(404).json({ error: 'not found' });
 
@@ -312,6 +360,18 @@ app.put('/api/todos/:id', wrap(async (req, res) => {
   todo.start_time   = start_time  || null;
   todo.end_time     = end_time    || null;
   if (progress !== undefined) todo.progress = progress;
+
+  // 위의 필드들과 달리 **조건부**다. progress와 같은 이유다.
+  // 이 라우트는 나열된 것을 무조건 덮어쓰므로, 무조건 대입하면 이 필드를 모르는
+  // 옛 화면이 수정을 보낼 때마다 성격이 지워진다 — 홈 화면에 설치한 앱은 사용자가
+  // 갱신을 수락할 때까지 캐시된 옛 번들로 돈다(CLAUDE.md "설치한 앱(PWA)의 갱신").
+  // 그래서 성격을 없애려면 생략이 아니라 category_id: null을 명시해서 보내야 한다.
+  if (category_id !== undefined) {
+    const next = await resolveCategoryId(category_id, req.userId);
+    if (next === undefined) return res.status(400).json(UNKNOWN_CATEGORY);
+    todo.category_id = next;
+  }
+
   if (todo.progress === 100 && !todo.completed) await markCompleted(todo);
 
   await todo.save();
@@ -383,6 +443,87 @@ app.put('/api/reviews/:id/complete', wrap(async (req, res) => {
       due_date: addDays(today, diff), completed: 0, completed_at: null,
     });
   }
+  res.json({ success: true });
+}));
+
+// ── 할 일 성격 ─────────────────────────────────────
+const DUPLICATE_KEY = 11000;
+const duplicateName = res => res.status(409).json({ error: '같은 이름의 성격이 이미 있습니다.' });
+
+app.get('/api/categories', wrap(async (req, res) => {
+  // _id로 정렬한다 — created_at은 날짜 단위 문자열이라 같은 날 만든 것끼리 순서가
+  // 요청마다 흔들리고, 그러면 관리 화면의 목록이 이유 없이 뒤바뀐다.
+  const categories = await Category.find({ userId: req.userId }).sort({ _id: 1 });
+  res.json(categories.map(formatCategory));
+}));
+
+app.post('/api/categories', wrap(async (req, res) => {
+  const valid = validateCategory(req.body);
+  if (!valid.ok) return res.status(400).json({ error: valid.error });
+
+  const count = await Category.countDocuments({ userId: req.userId });
+  if (count >= MAX_CATEGORIES) {
+    return res.status(400).json({ error: `성격은 최대 ${MAX_CATEGORIES}개까지 만들 수 있습니다.` });
+  }
+
+  // 인덱스에만 기대지 않고 여기서 먼저 본다. 유니크 인덱스는 연결 직후 비동기로
+  // 만들어지는데, 그 사이에 들어온 요청은 인덱스를 지나지 않아 중복이 그대로 저장된다.
+  // 한 번 중복이 생기면 인덱스 만들기가 영영 실패해서 그 뒤로는 아무도 막히지 않는다.
+  if (await Category.findOne({ userId: req.userId, name: valid.name })) return duplicateName(res);
+
+  try {
+    const category = await Category.create({
+      userId: req.userId, name: valid.name, color: valid.color, created_at: localDate(),
+    });
+    res.json(formatCategory(category));
+  } catch (err) {
+    // 유니크 인덱스는 비동기로 만들어진다. 미리 조회해서 막는 것만으로는 부족해서
+    // 회원가입(POST /api/auth/register)과 같은 방식으로 여기서도 한 번 더 받아낸다.
+    if (err.code === DUPLICATE_KEY) return duplicateName(res);
+    throw err;
+  }
+}));
+
+app.put('/api/categories/:id', wrap(async (req, res) => {
+  const category = await Category.findOne({ _id: req.params.id, userId: req.userId });
+  if (!category) return res.status(404).json({ error: 'not found' });
+
+  const valid = validateCategory(req.body);
+  if (!valid.ok) return res.status(400).json({ error: valid.error });
+
+  // 자기 자신은 빼고 본다 — 이름을 그대로 두고 색만 바꾸는 것은 중복이 아니다.
+  const sameName = await Category.findOne({
+    userId: req.userId, name: valid.name, _id: { $ne: category._id },
+  });
+  if (sameName) return duplicateName(res);
+
+  category.name = valid.name;
+  category.color = valid.color;
+  try {
+    await category.save();
+    res.json(formatCategory(category));
+  } catch (err) {
+    if (err.code === DUPLICATE_KEY) return duplicateName(res);
+    throw err;
+  }
+}));
+
+app.delete('/api/categories/:id', wrap(async (req, res) => {
+  // 성격을 **먼저** 지우고 할 일을 비운다. 이 앱에는 트랜잭션이 없어서 둘 사이에서
+  // 죽을 수 있는데, 이 순서로 남는 상태는 "성격은 없고 일부 할 일이 죽은 id를 들고 있다"다.
+  // 화면은 없는 성격을 조용히 무시해 칩을 안 그리므로 사용자가 누른 그대로 보이고,
+  // 그 할 일을 다음에 수정할 때 스스로 정리된다.
+  // 반대로 했다면 "성격은 살아있는데 할 일에서만 떨어져 나감" — 아무도 요청하지 않은
+  // 데이터 손실이 조용히 남는다.
+  const removed = await Category.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+  if (!removed) return res.status(404).json({ error: 'not found' });
+
+  // 남의 것을 건드릴 일이 없더라도 userId를 함께 건다 — 이 파일의 모든 질의가 그렇고,
+  // 여기만 예외인지 읽는 사람이 따져보게 만들지 않는다.
+  await Todo.updateMany(
+    { userId: req.userId, category_id: removed._id },
+    { $set: { category_id: null } },
+  );
   res.json({ success: true });
 }));
 
@@ -460,4 +601,4 @@ app.use('/api', (err, req, res, next) => {
   res.status(500).json({ error: '서버 오류가 발생했습니다.' });
 });
 
-module.exports = { app, User, Todo, Review, PushSubscription, INTERVALS };
+module.exports = { app, User, Todo, Review, Category, PushSubscription, INTERVALS };

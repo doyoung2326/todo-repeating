@@ -43,7 +43,11 @@ function pretendNarrowScreen() {
 beforeEach(() => {
   localStorage.clear();
   saveSession(SESSION);
-  vi.stubGlobal('fetch', vi.fn(async () => res(200, [TODO])));
+  // 경로를 가려서 답한다. 전부 [TODO]로 답하면 성격 목록에 할 일이 들어가
+  // 이름도 색도 없는 칩이 생긴다.
+  vi.stubGlobal('fetch', vi.fn(async (url) =>
+    String(url).endsWith('/categories') ? res(200, []) : res(200, [TODO])
+  ));
   pretendNarrowScreen();
 });
 
@@ -130,6 +134,7 @@ describe('좁은 화면 — 계정 메뉴', () => {
     expect(screen.getByRole('menuitem', { name: '로그아웃' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '비밀번호 변경' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '알림 설정' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '성격 관리' })).toBeInTheDocument();
   });
 
   // 앱스토어가 요구하는 경로다. 좁은 화면에서는 이 메뉴가 유일한 입구라 사라지면 안 된다.
@@ -154,6 +159,18 @@ describe('좁은 화면 — 계정 메뉴', () => {
 
     expect(screen.getByRole('heading', { name: '회원 탈퇴' })).toBeInTheDocument();
     expect(screen.getByLabelText('비밀번호 확인')).toBeInTheDocument();
+  });
+
+  it('성격 관리를 고르면 시트가 열린다', async () => {
+    render(<App />);
+    await screen.findByText('수학 문제집');
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '계정 메뉴' }));
+    await user.click(screen.getByRole('menuitem', { name: '성격 관리' }));
+
+    expect(screen.getByRole('dialog', { name: '성격 관리' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/새 성격 이름/)).toBeInTheDocument();
   });
 
   it('알림 설정을 고르면 시트가 열린다', async () => {

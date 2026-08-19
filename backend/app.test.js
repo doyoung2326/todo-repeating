@@ -10,7 +10,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { app, User, Todo, Review, PushSubscription } from './app.js';
+import { app, User, Todo, Review, Category, PushSubscription } from './app.js';
 import { resetPassword } from './scripts/reset-password.js';
 
 let mongod;
@@ -26,8 +26,11 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // Category를 빼먹으면 이름 유니크 인덱스 때문에 같은 이름을 쓰는 **두 번째** 테스트가
+  // 엉뚱한 409로 죽는다. 무엇을 검사하던 테스트인지와 상관없이.
   await Promise.all([
-    User.deleteMany({}), Todo.deleteMany({}), Review.deleteMany({}), PushSubscription.deleteMany({}),
+    User.deleteMany({}), Todo.deleteMany({}), Review.deleteMany({}),
+    Category.deleteMany({}), PushSubscription.deleteMany({}),
   ]);
 });
 
@@ -197,6 +200,225 @@ describe('토큰 버전 호환·방어', () => {
   });
 });
 
+/** 성격을 만들고 그 몸통을 준다. */
+async function addCategory(token, name, color = 1) {
+  const res = await request(app).post('/api/categories').set(asUser(token)).send({ name, color });
+  expect(res.status).toBe(200);
+  return res.body;
+}
+
+describe('할 일 성격', () => {
+  it('만든 성격이 목록에 나온다', async () => {
+    const a = await signUp('a@example.com');
+    await addCategory(a, '영어', 3);
+
+    const res = await request(app).get('/api/categories').set(asUser(a));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject([{ name: '영어', color: 3 }]);
+  });
+
+  it('이름이 비면 거절하고 아무것도 만들지 않는다', async () => {
+    const a = await signUp('a@example.com');
+
+    const res = await request(app).post('/api/categories').set(asUser(a)).send({ name: '  ' });
+
+    expect(res.status).toBe(400);
+    expect(await Category.countDocuments({})).toBe(0);
+  });
+
+  it('같은 이름의 성격을 두 번 만들 수 없다', async () => {
+    const a = await signUp('a@example.com');
+    await addCategory(a, '영어');
+
+    const res = await request(app).post('/api/categories').set(asUser(a)).send({ name: '영어' });
+
+    expect(res.status).toBe(409);
+    expect(await Category.countDocuments({})).toBe(1);
+  });
+
+  // 유니크 인덱스는 연결 직후 비동기로 만들어져서, 그 사이의 요청은 인덱스를 지나지 않는다.
+  // 인덱스를 지워서 그 창을 재현한다 — 라우트가 스스로 막지 못하면 중복이 저장되고,
+  // 한 번 중복이 생기면 인덱스 만들기가 영영 실패해 그 뒤로는 아무도 막히지 않는다.
+  it('유니크 인덱스가 아직 없어도 같은 이름을 두 번 만들 수 없다', async () => {
+    const a = await signUp('a@example.com');
+    await addCategory(a, '영어');
+    await Category.collection.dropIndex('userId_1_name_1').catch(() => {});
+
+    const res = await request(app).post('/api/categories').set(asUser(a)).send({ name: '영어' });
+
+    expect(res.status).toBe(409);
+    expect(await Category.countDocuments({})).toBe(1);
+    await Category.syncIndexes();
+  });
+
+  // 유니크 인덱스를 { name: 1 }로 잘못 걸면 다른 검사는 다 통과하고 이것만 깨진다
+  it('다른 사용자는 같은 이름의 성격을 만들 수 있다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    await addCategory(a, '영어');
+
+    const res = await request(app).post('/api/categories').set(asUser(b)).send({ name: '영어' });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('12개까지 만들 수 있고 13개째는 거절한다', async () => {
+    const a = await signUp('a@example.com');
+    for (let i = 1; i <= 11; i += 1) await addCategory(a, `성격${i}`);
+
+    const twelfth = await request(app).post('/api/categories').set(asUser(a)).send({ name: '성격12' });
+    const thirteenth = await request(app).post('/api/categories').set(asUser(a)).send({ name: '성격13' });
+
+    expect(twelfth.status).toBe(200);
+    expect(thirteenth.status).toBe(400);
+    expect(await Category.countDocuments({})).toBe(12);
+  });
+
+  it('이름과 색을 바꿀 수 있다', async () => {
+    const a = await signUp('a@example.com');
+    const category = await addCategory(a, '영어', 1);
+
+    const res = await request(app)
+      .put(`/api/categories/${category.id}`).set(asUser(a)).send({ name: '영어 단어', color: 5 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ name: '영어 단어', color: 5 });
+  });
+
+  it('이름을 다른 성격과 같게 바꿀 수는 없다', async () => {
+    const a = await signUp('a@example.com');
+    await addCategory(a, '영어');
+    const other = await addCategory(a, '과제');
+
+    const res = await request(app)
+      .put(`/api/categories/${other.id}`).set(asUser(a)).send({ name: '영어' });
+
+    expect(res.status).toBe(409);
+    expect((await Category.findById(other.id)).name).toBe('과제');
+  });
+
+  it('이름을 그대로 두고 색만 바꾸는 것은 중복이 아니다', async () => {
+    const a = await signUp('a@example.com');
+    const category = await addCategory(a, '영어', 1);
+
+    const res = await request(app)
+      .put(`/api/categories/${category.id}`).set(asUser(a)).send({ name: '영어', color: 7 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.color).toBe(7);
+  });
+
+  it('성격을 지우면 그 성격을 쓰던 할 일의 성격이 비워진다', async () => {
+    const a = await signUp('a@example.com');
+    const category = await addCategory(a, '영어');
+    const todo = await addTodo(a, '단어 외우기', { category_id: category.id });
+
+    await request(app).delete(`/api/categories/${category.id}`).set(asUser(a));
+
+    const list = await request(app).get('/api/todos').set(asUser(a));
+    expect(list.body[0].category_id).toBe(null);
+    expect((await Todo.findById(todo.id)).category_id).toBe(null);
+  });
+
+  it('성격을 지워도 다른 성격을 쓰던 할 일은 그대로다', async () => {
+    const a = await signUp('a@example.com');
+    const gone = await addCategory(a, '영어');
+    const kept = await addCategory(a, '과제');
+    const todo = await addTodo(a, '보고서', { category_id: kept.id });
+
+    await request(app).delete(`/api/categories/${gone.id}`).set(asUser(a));
+
+    expect(String((await Todo.findById(todo.id)).category_id)).toBe(kept.id);
+  });
+});
+
+describe('할 일에 성격 붙이기', () => {
+  it('할 일을 만들 때 성격을 붙일 수 있다', async () => {
+    const a = await signUp('a@example.com');
+    const category = await addCategory(a, '영어');
+
+    const todo = await addTodo(a, '단어 외우기', { category_id: category.id });
+
+    expect(String(todo.category_id)).toBe(category.id);
+  });
+
+  // formatTodo는 허용목록이라 한 줄을 빠뜨리면 서버는 멀쩡히 저장하는데 화면엔 안 나온다
+  it('성격을 주지 않으면 성격 없이 만들어지고, 그 사실이 응답에 담긴다', async () => {
+    const a = await signUp('a@example.com');
+
+    const todo = await addTodo(a, '그냥 할 일');
+
+    expect(todo).toHaveProperty('category_id');
+    expect(todo.category_id).toBe(null);
+  });
+
+  // 이 파일에서 가장 중요한 테스트다. PUT은 나열된 필드를 무조건 덮어쓰는 라우트라,
+  // category_id에 !== undefined 가드가 없으면 이 필드를 모르는 옛 화면이 수정을
+  // 보낼 때마다 성격이 조용히 지워진다.
+  it('수정 요청에 성격이 없으면 기존 성격을 지우지 않는다', async () => {
+    const a = await signUp('a@example.com');
+    const category = await addCategory(a, '영어');
+    const todo = await addTodo(a, '단어 외우기', { category_id: category.id });
+
+    const res = await request(app)
+      .put(`/api/todos/${todo.id}`).set(asUser(a))
+      .send({ text: '단어 외우기', importance: 2 });
+
+    expect(res.status).toBe(200);
+    expect(String(res.body.category_id)).toBe(category.id);
+    expect(String((await Todo.findById(todo.id)).category_id)).toBe(category.id);
+  });
+
+  it('수정 요청에 성격을 null로 주면 지운다', async () => {
+    const a = await signUp('a@example.com');
+    const category = await addCategory(a, '영어');
+    const todo = await addTodo(a, '단어 외우기', { category_id: category.id });
+
+    const res = await request(app)
+      .put(`/api/todos/${todo.id}`).set(asUser(a))
+      .send({ text: '단어 외우기', importance: 1, category_id: null });
+
+    expect(res.status).toBe(200);
+    expect(res.body.category_id).toBe(null);
+  });
+
+  it('수정으로 다른 성격을 붙일 수 있다', async () => {
+    const a = await signUp('a@example.com');
+    const before = await addCategory(a, '영어');
+    const after = await addCategory(a, '과제');
+    const todo = await addTodo(a, '할 일', { category_id: before.id });
+
+    const res = await request(app)
+      .put(`/api/todos/${todo.id}`).set(asUser(a))
+      .send({ text: '할 일', importance: 1, category_id: after.id });
+
+    expect(String(res.body.category_id)).toBe(after.id);
+  });
+
+  it('없는 성격을 붙이려 하면 거절하고 할 일도 만들지 않는다', async () => {
+    const a = await signUp('a@example.com');
+    const gone = new mongoose.Types.ObjectId().toString();
+
+    const res = await request(app)
+      .post('/api/todos').set(asUser(a)).send({ text: '할 일', category_id: gone });
+
+    expect(res.status).toBe(400);
+    expect(await Todo.countDocuments({})).toBe(0);
+  });
+
+  // 이 검사가 없으면 CastError가 전역 처리기를 타고 404가 되어, 같은 실수인데
+  // 형식이 틀렸을 때만 답이 달라진다
+  it('성격 id 형식이 아닌 값을 줘도 500이나 404가 아니라 400을 준다', async () => {
+    const a = await signUp('a@example.com');
+
+    const res = await request(app)
+      .post('/api/todos').set(asUser(a)).send({ text: '할 일', category_id: '이건-id가-아님' });
+
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('사용자별 데이터 격리', () => {
   it('내 목록에는 내 할일만 보인다', async () => {
     const a = await signUp('a@example.com');
@@ -274,6 +496,67 @@ describe('사용자별 데이터 격리', () => {
 
     expect(res.status).toBe(404);
     expect((await Review.findById(reviewId)).completed).toBe(0);
+  });
+
+  it('남의 성격은 내 목록에 보이지 않는다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    await addCategory(a, 'A의 성격');
+    await addCategory(b, 'B의 성격');
+
+    const listA = await request(app).get('/api/categories').set(asUser(a));
+
+    expect(listA.body.map(c => c.name)).toEqual(['A의 성격']);
+  });
+
+  it('남의 성격은 수정할 수 없고 이름도 그대로 남는다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    const categoryA = await addCategory(a, 'A의 성격');
+
+    const res = await request(app)
+      .put(`/api/categories/${categoryA.id}`).set(asUser(b)).send({ name: '가로챈 성격', color: 2 });
+
+    expect(res.status).toBe(404);
+    expect((await Category.findById(categoryA.id)).name).toBe('A의 성격');
+  });
+
+  it('남의 성격은 삭제할 수 없다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    const categoryA = await addCategory(a, 'A의 성격');
+
+    expect((await request(app).delete(`/api/categories/${categoryA.id}`).set(asUser(b))).status).toBe(404);
+    expect(await Category.findById(categoryA.id)).not.toBe(null);
+  });
+
+  // 막지 않으면 B의 할 일에 A의 성격 id가 영구히 박히고, A가 그것을 지워도
+  // 정리는 A의 할 일만 훑으므로 그대로 남는다
+  it('남의 성격을 내 할일에 붙일 수 없다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    const categoryA = await addCategory(a, 'A의 성격');
+    const todoB = await addTodo(b, 'B의 할일');
+
+    const res = await request(app)
+      .put(`/api/todos/${todoB.id}`).set(asUser(b))
+      .send({ text: 'B의 할일', importance: 1, category_id: categoryA.id });
+
+    expect(res.status).toBe(400);
+    expect((await Todo.findById(todoB.id)).category_id).toBe(null);
+  });
+
+  it('남의 성격을 지워도 내 할일의 성격은 그대로다', async () => {
+    const a = await signUp('a@example.com');
+    const b = await signUp('b@example.com');
+    // 두 사람이 같은 이름을 쓰고 있어도 서로의 정리에 휩쓸리지 않아야 한다
+    const categoryA = await addCategory(a, '영어');
+    const categoryB = await addCategory(b, '영어');
+    const todoB = await addTodo(b, 'B의 할일', { category_id: categoryB.id });
+
+    await request(app).delete(`/api/categories/${categoryA.id}`).set(asUser(a));
+
+    expect(String((await Todo.findById(todoB.id)).category_id)).toBe(categoryB.id);
   });
 
   it('한 사람의 할일을 지워도 남의 복습 일정은 남는다', async () => {

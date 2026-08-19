@@ -8,6 +8,7 @@ import AuthScreen from './components/AuthScreen';
 import PasswordChangeModal from './components/PasswordChangeModal';
 import DeleteAccountModal from './components/DeleteAccountModal';
 import NotificationSettings from './components/NotificationSettings';
+import CategoryManager from './components/CategoryManager';
 import BottomTabBar from './components/BottomTabBar';
 import BottomSheet from './components/BottomSheet';
 import { PlusIcon } from './components/icons';
@@ -37,6 +38,10 @@ export default function App() {
   const [session, setSession]       = useState(loadSession);
   const [today, setToday]           = useState(localToday);
   const [todos, setTodos]           = useState([]);
+  // null = 아직 못 받아왔다(모른다), 배열 = 받아왔다. 이 둘을 구분하지 않으면
+  // 조회에 실패했을 때 "성격이 하나도 없다"로 읽혀서, 할 일을 수정할 때마다
+  // 붙어 있던 성격이 조용히 지워진다.
+  const [categories, setCategories] = useState(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [editingTodo, setEditingTodo] = useState(null);
@@ -44,6 +49,7 @@ export default function App() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [isDraggingOverLeft, setDraggingOverLeft] = useState(false);
   const draggingTodoIdRef = useRef(null);
   const leftDragCount = useRef(0);
@@ -66,12 +72,14 @@ export default function App() {
     clearSession();
     setSession(null);
     setTodos([]);
+    setCategories(null);
     setEditingTodo(null);
     setProgressItems(null);
     setError(null);
     setSheetOpen(false);
     setAccountMenuOpen(false);
     setNotifyOpen(false);
+    setCategoryOpen(false);
   }, []);
 
   const authFetch = useMemo(
@@ -97,10 +105,26 @@ export default function App() {
     }
   }, [authFetch]);
 
+  // 실패해도 배너를 띄우지 않는다. 이 기능이 없는 옛 서버는 404를 주는데,
+  // 곁다리 기능 하나 때문에 화면 전체에 "서버에 연결할 수 없습니다"가 뜨면 안 된다.
+  //
+  // 다만 **실패했다고 빈 배열로 덮지도 않는다.** 빈 배열은 "성격이 없다"는 사실이라,
+  // 모르는 것을 사실로 바꿔 놓으면 할 일 수정 폼이 "성격 없음"을 보내 멀쩡한 성격을 지운다.
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API}/categories`);
+      if (!res.ok) throw new Error();
+      setCategories(await res.json());
+    } catch {
+      // 모르는 채로 둔다
+    }
+  }, [authFetch]);
+
   // 로그인 직후(그리고 앱 시작 시) 1회: 목록을 받아오고 진행률 미입력 항목을 확인
   useEffect(() => {
     if (!account) { setLoading(false); return; }
     setLoading(true);
+    fetchCategories();
     fetchTodos().then(data => {
       if (!data) return;
       const today = localToday();
@@ -196,6 +220,14 @@ export default function App() {
   }, []);
 
   const closeNotify = useCallback(() => setNotifyOpen(false), []);
+  const closeCategory = useCallback(() => setCategoryOpen(false), []);
+
+  // 열 때 한 번 더 받아온다. 처음에 조회가 실패해 목록을 모르는 채였다면
+  // 여기서 스스로 회복한다 — 사용자가 다시 로그인할 이유가 없다.
+  const openCategory = useCallback(() => {
+    setCategoryOpen(true);
+    fetchCategories();
+  }, [fetchCategories]);
 
   const createTodo = async (data) => {
     try {
@@ -244,6 +276,33 @@ export default function App() {
     } catch (e) { reportFailure('진행률 저장 실패', e); }
   };
 
+  // 추가·수정의 실패는 일부러 관리 화면까지 올려 보낸다 — 이름이 겹쳤다(409) 같은 말은
+  // alert보다 폼 안에 붙어 있어야 고칠 수 있다.
+  // 단 세션 만료는 실패가 아니다(이미 로그인 화면이다). 그것만 여기서 삼킨다.
+  const saveCategory = async (url, method, data) => {
+    try {
+      await apiCall(url, { method, body: JSON.stringify(data) });
+    } catch (e) {
+      if (e instanceof SessionExpiredError) return;
+      throw e;
+    }
+    fetchCategories();
+  };
+
+  const createCategory = (data) => saveCategory(`${API}/categories`, 'POST', data);
+  const updateCategory = (id, data) => saveCategory(`${API}/categories/${id}`, 'PUT', data);
+
+  const deleteCategory = async (id) => {
+    if (!window.confirm('이 성격을 삭제할까요? 이 성격이 붙은 할 일에서는 표시만 사라집니다.')) return;
+    try {
+      await apiCall(`${API}/categories/${id}`, { method: 'DELETE' });
+      // 할 일도 다시 받아온다. 칩은 성격 목록만 새로 받아도 사라지지만, 손에 든
+      // todos가 죽은 id를 계속 들고 있으면 그 할 일을 수정할 때 폼이 그 id를 되돌려
+      // 보내고 서버가 400을 준다. 서버는 이미 비웠으니 이쪽도 맞춘다.
+      await Promise.all([fetchCategories(), fetchTodos()]);
+    } catch (e) { reportFailure('성격 삭제 실패', e); }
+  };
+
   // 추가든 수정이든 폼은 겹침 창으로 띄운다. 목록 위에 상시 두면 어느 폭에서든
   // 자리를 크게 먹는다.
   const startEdit = (todo) => {
@@ -254,6 +313,14 @@ export default function App() {
   // 완료를 둘로 가른다. activeReview는 서버가 "복습 대상이고 완료된" 항목에만 채우므로,
   // 완료했는데 activeReview가 없다 = 복습을 다 끝냈거나 애초에 복습을 안 쓰는 항목이다.
   // (미완료도 activeReview가 없으니 completed 조건을 빼면 안 된다.)
+  // 할 일이 든 것은 성격 id뿐이다. 이름과 색은 여기서 찾아 붙인다.
+  // 할 일 객체 자체에 성격을 얹지는 않는다 — 그 객체는 수정 폼의 initialValues이기도 해서,
+  // 필드가 늘면 폼이 그것까지 서버로 되돌려 보내게 된다.
+  const categoryById = useMemo(
+    () => new Map((categories ?? []).map(c => [String(c.id), c])),
+    [categories]
+  );
+
   const incompleteTodos = todos.filter(t => !t.completed);
   const completedTodos  = todos.filter(t =>  t.completed &&  t.activeReview);
   const archivedTodos   = todos.filter(t =>  t.completed && !t.activeReview);
@@ -282,6 +349,7 @@ export default function App() {
     <TodoForm
       onSubmit={editingTodo ? (data) => updateTodo(editingTodo.id, data) : createTodo}
       initialValues={editingTodo}
+      categories={categories}
       onCancel={closeSheet}
     />
   );
@@ -341,6 +409,10 @@ export default function App() {
                       알림 설정
                     </button>
                     <button type="button" role="menuitem"
+                      onClick={() => { setAccountMenuOpen(false); openCategory(); }}>
+                      성격 관리
+                    </button>
+                    <button type="button" role="menuitem"
                       onClick={() => { setAccountMenuOpen(false); setChangingPassword(true); }}>
                       비밀번호 변경
                     </button>
@@ -364,6 +436,7 @@ export default function App() {
             <>
               <span className="app-user-email" title={email}>{email}</span>
               <button className="app-header-btn" type="button" onClick={() => setNotifyOpen(true)}>알림 설정</button>
+              <button className="app-header-btn" type="button" onClick={openCategory}>성격 관리</button>
               <button className="app-header-btn" type="button" onClick={() => setChangingPassword(true)}>비밀번호 변경</button>
               <button className="app-header-btn" type="button" onClick={logout}>로그아웃</button>
               <button className="app-header-btn danger" type="button" onClick={() => setDeletingAccount(true)}>회원 탈퇴</button>
@@ -411,6 +484,7 @@ export default function App() {
             archivedTodos={archivedTodos}
             today={today}
             compact={isCompact}
+            categoryById={categoryById}
             onComplete={completeTodo}
             onEdit={startEdit}
             onDelete={deleteTodo}
@@ -444,6 +518,17 @@ export default function App() {
       {notifyOpen && (
         <BottomSheet label="알림 설정" onClose={closeNotify}>
           <NotificationSettings api={API} apiCall={apiCall} />
+        </BottomSheet>
+      )}
+
+      {categoryOpen && (
+        <BottomSheet label="성격 관리" onClose={closeCategory}>
+          <CategoryManager
+            categories={categories ?? []}
+            onCreate={createCategory}
+            onUpdate={updateCategory}
+            onDelete={deleteCategory}
+          />
         </BottomSheet>
       )}
 

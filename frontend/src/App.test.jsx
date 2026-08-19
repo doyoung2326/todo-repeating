@@ -30,6 +30,10 @@ function mockApi(routes) {
       const [m, suffix] = key.split(' ');
       if (m === method && String(url).endsWith(suffix)) return handler(options);
     }
+    // 성격 목록은 App이 뜰 때마다 부르지만 대부분의 테스트와는 상관이 없다.
+    // 표마다 적게 하면 표 열여섯 개가 곁다리 기능 하나 때문에 늘어난다.
+    // 성격을 실제로 보는 테스트는 표에 넣어 이 기본값을 덮으면 된다.
+    if (method === 'GET' && String(url).endsWith('/categories')) return res(200, []);
     throw new Error(`테스트가 예상하지 못한 요청: ${method} ${url}`);
   });
   vi.stubGlobal('fetch', fn);
@@ -132,6 +136,97 @@ describe('App — 넓은 화면에서도 할 일 추가는 + 버튼으로', () =
 
     expect(screen.getByRole('dialog', { name: '할 일 수정' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('수학 문제집')).toBeInTheDocument();
+  });
+});
+
+describe('App — 할 일 성격', () => {
+  const CATEGORY = { id: 'c1', name: '영어', color: 3 };
+
+  it('할 일에 붙은 성격의 이름을 목록에 보여준다', async () => {
+    saveSession(SESSION);
+    mockApi({
+      'GET /todos': () => res(200, [{ ...TODO, category_id: 'c1' }]),
+      'GET /categories': () => res(200, [CATEGORY]),
+    });
+    render(<App />);
+
+    expect(await screen.findByText('영어')).toBeInTheDocument();
+  });
+
+  it('넓은 화면 헤더의 성격 관리를 누르면 관리 창이 열린다', async () => {
+    saveSession(SESSION);
+    mockApi({
+      'GET /todos': () => res(200, [TODO]),
+      'GET /categories': () => res(200, [CATEGORY]),
+    });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '성격 관리' }));
+
+    expect(screen.getByRole('dialog', { name: '성격 관리' })).toBeInTheDocument();
+  });
+
+  // 칩은 성격 목록만 새로 받아도 사라지지만, 손에 든 할 일이 죽은 id를 계속
+  // 들고 있으면 그 할 일을 수정할 때 폼이 그것을 되돌려 보내 서버가 400을 준다.
+  it('성격을 지우면 할 일 목록도 다시 받아온다', async () => {
+    saveSession(SESSION);
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    const fetchMock = mockApi({
+      'GET /todos': () => res(200, [TODO]),
+      'GET /categories': () => res(200, [CATEGORY]),
+      'DELETE /categories/c1': () => res(200, { success: true }),
+    });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '성격 관리' }));
+    await user.click(screen.getByRole('button', { name: '영어 성격 메뉴' }));
+
+    const todosBefore = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/todos')).length;
+    await user.click(screen.getByRole('menuitem', { name: '삭제' }));
+
+    await waitFor(() => {
+      const todosAfter = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/todos')).length;
+      expect(todosAfter).toBeGreaterThan(todosBefore);
+    });
+  });
+
+  // 이 기능이 없는 옛 서버는 404를 준다. 곁다리 하나로 화면 전체를 막으면 안 된다.
+  it('성격을 받아오지 못해도 할 일 목록은 그대로 보여준다', async () => {
+    saveSession(SESSION);
+    mockApi({
+      'GET /todos': () => res(200, [TODO]),
+      'GET /categories': () => res(404, { error: 'not found' }),
+    });
+    render(<App />);
+
+    expect(await screen.findByText('수학 문제집')).toBeInTheDocument();
+    expect(screen.queryByText(/서버에 연결할 수 없습니다/)).not.toBeInTheDocument();
+  });
+
+  // 성격 조회가 실패한 화면을 "성격이 하나도 없다"로 읽으면, 할 일을 고칠 때마다
+  // 붙어 있던 성격이 조용히 지워진다. 서버가 가드로 막아 둔 사고를 화면이 되살리는 셈이다.
+  it('성격을 받아오지 못한 상태에서 할 일을 고쳐도 성격을 지우지 않는다', async () => {
+    saveSession(SESSION);
+    const fetchMock = mockApi({
+      'GET /todos': () => res(200, [{ ...TODO, category_id: 'c1' }]),
+      'GET /categories': () => res(500, { error: '서버 오류' }),
+      'PUT /todos/t1': () => res(200, { ...TODO, category_id: 'c1' }),
+    });
+    render(<App />);
+    await screen.findByText('수학 문제집');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTitle('수정'));
+    await user.click(screen.getByRole('button', { name: '수정 완료' }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, opt]) => opt?.method === 'PUT');
+      expect(put).toBeDefined();
+      expect(JSON.parse(put[1].body)).not.toHaveProperty('category_id');
+    });
   });
 });
 

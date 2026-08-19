@@ -1,4 +1,4 @@
-import { STAGE_LABELS, IMP_LABELS, progressColor } from '../theme';
+import { STAGE_LABELS, IMP_LABELS, progressColor, CAT_BG, CAT_FG } from '../theme';
 import { daysDiff } from '../../../shared/dates.js';
 import MoreMenu from './MoreMenu';
 import { PinIcon, EditIcon, TrashIcon } from './icons';
@@ -24,11 +24,16 @@ function ReviewBadge({ review, today, onCompleteReview }) {
 }
 
 export default function TodoItem({
-  todo, today, compact,
+  todo, today, compact, categoryById,
   onComplete, onEdit, onDelete, onCompleteReview, onAddToToday, onDragStart, onDragEnd,
 }) {
   const done        = !!todo.completed;
   const needsReview = !!todo.needs_review;
+
+  // 없는 성격을 가리키고 있으면(방금 지워졌다면) 조용히 칩을 그리지 않는다.
+  // 서버도 지울 때 할 일을 비우지만 트랜잭션이 없어 그 사이가 있고, 화면이 그것을
+  // 견디는 쪽이 맞다.
+  const category = todo.category_id ? categoryById?.get(String(todo.category_id)) : null;
 
   // 마감일 태그
   let deadlineTag = null;
@@ -90,6 +95,14 @@ export default function TodoItem({
           >
             {IMP_LABELS[todo.importance]}
           </span>
+          {category && (
+            <span
+              className="cat-tag"
+              style={{ background: CAT_BG[category.color], color: CAT_FG[category.color] }}
+            >
+              {category.name}
+            </span>
+          )}
           {needsReview && !done && <span className="review-pending-tag">복습 예정</span>}
           {todo.start_time && (
             <span className="time-tag">
